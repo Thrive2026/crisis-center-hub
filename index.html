@@ -158,14 +158,17 @@ textarea.inp{resize:vertical;min-height:70px}
 .cov-yellow{background:var(--warn-soft);color:var(--warn)}
 .cov-green{background:var(--good-soft);color:var(--good)}
 
-/* ---- supervision tree ---- */
-.tree{padding:10px 0}
-.tree-node{border:1px solid var(--rule);border-left:4px solid var(--thrive-blue);border-radius:3px;background:var(--paper);padding:10px 14px;margin-bottom:8px;box-shadow:var(--shadow)}
-.tree-node.mgr{border-left-color:var(--thrive-yellow)}
-.tree-node.lead{border-left-color:var(--thrive-pink)}
-.tree-children{margin-left:28px;padding-left:16px;border-left:2px dashed var(--rule-strong);margin-top:8px}
-.tree-name{font-weight:600;font-size:13.5px}
-.tree-role{font-size:10px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);font-weight:600}
+/* ---- supervision org chart ---- */
+.orgchart-wrap{position:relative;overflow-x:auto;padding:32px 24px 24px}
+.orgchart{display:inline-flex;position:relative}
+.branch{display:flex;flex-direction:column;align-items:center}
+.children{display:flex;gap:28px;margin-top:44px;position:relative}
+.orgchart .node{position:relative;z-index:2;background:var(--paper);border:1px solid var(--rule);border-radius:3px;box-shadow:var(--shadow);padding:10px 16px 11px;min-width:154px;text-align:left;border-top:3px solid var(--thrive-blue)}
+.orgchart .node.mgr{border-top-color:var(--thrive-yellow)}
+.orgchart .node.lead{border-top-color:var(--thrive-pink)}
+.orgchart .node-name{font-family:'Fraunces',serif;font-weight:500;font-size:14px;white-space:nowrap;color:var(--ink)}
+.orgchart .node-role{font-size:9.5px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);font-weight:600;margin-top:3px;white-space:nowrap}
+svg.orgchart-lines{position:absolute;top:0;left:0;pointer-events:none;z-index:1;overflow:visible}
 
 /* ---- role tabs on login ---- */
 .pill-row{display:flex;gap:6px;flex-wrap:wrap;justify-content:center;margin-top:14px}
@@ -400,7 +403,12 @@ function renderView(){
     ukg: viewUkg, settings: viewSettings,
   };
   v.innerHTML = (fns[VIEW]||viewDashboard)();
+  if(VIEW==='tree'){
+    requestAnimationFrame(()=>requestAnimationFrame(()=>drawOrgLines(true)));
+    setTimeout(()=>drawOrgLines(true), 350); // safety redraw in case web fonts swap late and shift box widths
+  }
 }
+window.addEventListener('resize', ()=>{ if(VIEW==='tree') drawOrgLines(false); });
 
 // ══════════════════════════════════════════════════════════
 // SCHEDULE HELPERS
@@ -904,17 +912,61 @@ async function saveSupSession(){
 function viewTree(){
   const root = STAFF.find(s=>s.role==='manager');
   return `
-  <div class="page-hd"><div><div class="eyebrow">Org Chart</div><h1>Supervision Tree</h1><div class="lede">Generated live from each person's supervisor on the Roster.</div></div></div>
-  <div class="card"><div class="tree">${root?treeNode(root):'<div class="lede">No manager on the roster.</div>'}</div></div>`;
+  <div class="page-hd"><div><div class="eyebrow">Org Chart</div><h1>Supervision Tree</h1><div class="lede">David at the top, his direct reports beneath him, and each team lead's own team beneath them — generated live from each person's supervisor on the Roster.</div></div></div>
+  <div class="card"><div class="orgchart-wrap" id="orgchartWrap">
+    ${root ? `<div class="orgchart">${orgBranch(root)}</div><svg class="orgchart-lines" id="orgchartLines"></svg>` : '<div class="lede">No manager on the roster.</div>'}
+  </div></div>`;
 }
-function treeNode(s){
-  const kids = STAFF.filter(x=>x.supervisorId===s.id);
-  const cls = s.role==='manager'?'mgr':(s.role==='team_lead'?'lead':'');
-  return `<div class="tree-node ${cls}">
-    <div class="tree-name">${esc(s.name)}</div>
-    <div class="tree-role">${roleLabel(s)}</div>
-  </div>
-  ${kids.length?`<div class="tree-children">${kids.sort((a,b)=>a.name.localeCompare(b.name)).map(treeNode).join('')}</div>`:''}`;
+function orgBranch(s){
+  const kids = STAFF.filter(x=>x.supervisorId===s.id).sort((a,b)=>a.name.localeCompare(b.name));
+  const cls = s.role==='manager'?'mgr':(s.role==='team_lead'?'lead':'staff');
+  return `<div class="branch">
+    <div class="node ${cls}" data-id="${s.id}">
+      <div class="node-name">${esc(s.name)}</div>
+      <div class="node-role">${roleLabel(s)}</div>
+    </div>
+    ${kids.length?`<div class="children">${kids.map(orgBranch).join('')}</div>`:''}
+  </div>`;
+}
+function drawOrgLines(centerRoot){
+  const wrap = document.getElementById('orgchartWrap');
+  const svg = document.getElementById('orgchartLines');
+  if(!wrap || !svg) return;
+  const w = wrap.scrollWidth, h = wrap.scrollHeight;
+  svg.setAttribute('width', w);
+  svg.setAttribute('height', h);
+  svg.setAttribute('viewBox', `0 0 ${w} ${h}`);
+  const wrapRect = wrap.getBoundingClientRect();
+  const pt = (el, edge) => {
+    const r = el.getBoundingClientRect();
+    const x = r.left - wrapRect.left + wrap.scrollLeft + r.width/2;
+    const y = (edge==='bottom' ? r.bottom : r.top) - wrapRect.top + wrap.scrollTop;
+    return {x,y};
+  };
+  let paths = '';
+  STAFF.forEach(s=>{
+    if(s.supervisorId==null) return;
+    const childEl = wrap.querySelector(`.node[data-id="${s.id}"]`);
+    const parentEl = wrap.querySelector(`.node[data-id="${s.supervisorId}"]`);
+    if(!childEl || !parentEl) return;
+    const p = pt(parentEl,'bottom');
+    const c = pt(childEl,'top');
+    const midY = p.y + (c.y - p.y) * 0.5;
+    paths += `<path d="M${p.x},${p.y} L${p.x},${midY} L${c.x},${midY} L${c.x},${c.y}" fill="none" style="stroke:var(--rule-strong);stroke-width:2"/>`;
+  });
+  svg.innerHTML = paths;
+  // A parent is centered over the full width of its subtree, so with several wide teams
+  // the root can end up well outside the initial viewport — start the view centered on
+  // whoever's at the top instead of leaving it scrolled to the far left. Only do this on
+  // first open, not on every resize, so we don't yank a scroll position out from under
+  // someone who's already looking somewhere else in the chart.
+  if(centerRoot){
+    const rootNode = wrap.querySelector('.orgchart > .branch > .node');
+    if(rootNode){
+      const r = pt(rootNode,'top');
+      wrap.scrollLeft = Math.max(0, r.x - wrap.clientWidth/2);
+    }
+  }
 }
 
 // ══════════════════════════════════════════════════════════
