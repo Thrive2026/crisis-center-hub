@@ -1,0 +1,1016 @@
+<!DOCTYPE html>
+<!--
+  ============================================================================
+  THRIVE CRISIS CENTER — MANAGER HUB
+  CONFIDENTIAL & PROPRIETARY — (c) 2026 Thrive Peer Support. All rights reserved.
+  This file and its contents (code, structure, workflows, and data models) are
+  the proprietary property of Thrive Peer Support, intended solely for internal
+  use by authorized Thrive personnel. Do not copy, distribute, or disclose
+  outside Thrive Peer Support without authorization.
+
+  Backend: same shared Supabase project as Director Hub / Community Hub
+  (appdata key-value table — cc_staff / cc_schedule / cc_requests /
+  cc_supervision / cc_settings keys). Open this file directly in a browser;
+  it is NOT meant to be published through a sandboxed artifact viewer, since
+  those block outbound fetch() calls to external hosts like Supabase.
+  ============================================================================
+-->
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Crisis Center — Manager Hub</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,300;9..144,400;9..144,500;9..144,600;9..144,700&family=IBM+Plex+Sans:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{
+  --thrive-blue:#3c50a0; --thrive-blue-deep:#283c8c; --thrive-blue-dark:#1a2861;
+  --thrive-yellow:#f0c814; --thrive-pink:#c83c8c; --thrive-green:#3cb43c;
+  --bg:#f7f3ec; --paper:#ffffff; --ink:#1a2861; --ink-soft:#3e4a78;
+  --muted:#8089a8; --rule:#e6dfd2; --rule-strong:#cdc4b2;
+  --accent:var(--thrive-yellow); --accent-soft:#fbeec0;
+  --good:#2d8c30; --good-soft:#dcf0dc;
+  --warn:#a07e0a; --warn-soft:#fbf0c4;
+  --bad:#a52d6d; --bad-soft:#f4dae8;
+  --navy:var(--thrive-blue); --navy-deep:var(--thrive-blue-deep);
+  --shadow:0 1px 0 rgba(40,60,140,.04), 0 8px 28px -12px rgba(40,60,140,.22);
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{margin:0;padding:0;background:var(--bg);color:var(--ink);font-family:'IBM Plex Sans',system-ui,sans-serif;font-size:14px;line-height:1.5;-webkit-font-smoothing:antialiased;min-height:100vh}
+::-webkit-scrollbar{width:6px;height:6px}
+::-webkit-scrollbar-thumb{background:var(--rule-strong);border-radius:1px}
+::-webkit-scrollbar-track{background:transparent}
+h1,h2,h3,h4{font-family:'Fraunces',Georgia,serif;font-weight:500;letter-spacing:-0.01em;color:var(--ink);margin:0}
+h1{font-size:28px;font-weight:400;letter-spacing:-0.02em}
+h2{font-size:20px;font-weight:500}
+h3{font-size:16px;font-weight:600}
+.eyebrow{font-size:10.5px;letter-spacing:.22em;text-transform:uppercase;color:var(--thrive-blue);font-weight:600;margin-bottom:6px}
+.serif{font-family:'Fraunces',Georgia,serif;font-weight:400;letter-spacing:-0.02em}
+.mono{font-family:'IBM Plex Mono',monospace}
+.shell{display:grid;grid-template-columns:220px 1fr;min-height:100vh}
+@media(max-width:880px){.shell{grid-template-columns:1fr}.side{display:none !important}}
+nav.side{background:var(--thrive-blue-dark);color:#cdd4f0;border-right:1px solid #0e1638;display:flex;flex-direction:column;position:sticky;top:0;height:100vh;overflow-y:auto}
+nav.side .brand{padding:18px 20px;border-bottom:1px solid #0e1638;display:flex;align-items:center;gap:12px}
+nav.side .brand .text{display:flex;flex-direction:column;line-height:1.15}
+nav.side .brand .mark{font-family:'Fraunces',serif;font-style:italic;font-weight:400;font-size:17px;color:#fff}
+nav.side .brand .sub{font-size:9px;letter-spacing:.22em;text-transform:uppercase;color:#8993c4;font-weight:500;margin-top:2px}
+nav.side .group{font-size:10px;letter-spacing:.22em;text-transform:uppercase;color:#8993c4;padding:18px 20px 6px;font-weight:600}
+nav.side .nav-item{display:flex;align-items:center;gap:10px;padding:9px 20px;color:#dde2f5;text-decoration:none;font-size:13px;border-left:3px solid transparent;cursor:pointer;transition:background .15s, border-color .15s;background:transparent;border-top:none;border-right:none;border-bottom:none;font-family:inherit;text-align:left;width:100%}
+nav.side .nav-item:hover{background:rgba(60,80,160,.5)}
+nav.side .nav-item.active{background:var(--thrive-blue);border-left-color:var(--thrive-yellow);color:#fff;font-weight:500}
+nav.side .nav-item .dot{width:6px;height:6px;border-radius:50%;background:#5060a0;flex-shrink:0}
+nav.side .nav-item.active .dot{background:var(--thrive-yellow)}
+nav.side .footer{padding:18px 20px;margin-top:auto;border-top:1px solid #0e1638;font-size:10.5px;color:#8993c4;letter-spacing:.04em;line-height:1.5}
+nav.side .footer strong{color:#cdd4f0;font-weight:600}
+header.topbar{background:linear-gradient(95deg, var(--thrive-blue-deep) 0%, var(--thrive-blue) 100%);color:#f5f1e8;padding:10px 28px;display:flex;align-items:center;justify-content:space-between;gap:14px;border-bottom:3px solid var(--thrive-yellow);position:sticky;top:0;z-index:50;flex-wrap:wrap}
+header.topbar .ctx{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+header.topbar .ctx .where{font-family:'Fraunces',serif;font-style:italic;font-size:15px;color:#fff}
+header.topbar .meta{font-size:12px;color:#cdd4f0;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+header.topbar .pill{padding:4px 10px;border:1px solid rgba(255,255,255,.18);border-radius:2px;background:rgba(255,255,255,.04);font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:.04em}
+header.topbar .pill.live{color:#d3f1a8;border-color:rgba(60,180,60,.5);background:rgba(60,180,60,.12)}
+header.topbar .pill.seed{color:#f5e3a0;border-color:rgba(240,200,20,.4);background:rgba(240,200,20,.08)}
+header.topbar .role-btn{background:rgba(67,160,71,.15);border:1px solid rgba(67,160,71,.4);border-radius:2px;padding:5px 10px;color:#fff;cursor:pointer;font-family:inherit;display:flex;align-items:center;gap:6px;font-size:12px}
+header.topbar .role-btn .lbl{font-size:9px;color:rgba(255,255,255,.55);text-transform:uppercase;letter-spacing:.06em;line-height:1}
+header.topbar .role-btn .val{font-size:12px;font-weight:600;color:#fff;line-height:1.3}
+header.topbar .icon-btn{background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.15);color:rgba(255,255,255,.75);width:28px;height:28px;border-radius:50%;cursor:pointer;font-family:inherit;font-weight:600;font-size:13px;display:inline-flex;align-items:center;justify-content:center}
+.menu-dd{position:absolute;background:var(--paper);border:1px solid var(--rule);border-radius:3px;box-shadow:0 12px 32px rgba(26,40,97,.18);min-width:200px;overflow:hidden;z-index:200}
+.menu-dd button{display:block;width:100%;text-align:left;background:none;border:none;padding:9px 14px;font-family:inherit;font-size:13px;color:var(--ink);cursor:pointer;border-bottom:1px solid var(--rule)}
+.menu-dd button:last-child{border-bottom:none}
+.menu-dd button:hover{background:#f1ead9}
+main{padding:24px 32px 60px;max-width:1500px}
+.page-hd{display:flex;align-items:flex-end;justify-content:space-between;border-bottom:1px solid var(--rule);padding-bottom:16px;margin-bottom:24px;gap:24px;flex-wrap:wrap}
+.page-hd .lede{color:var(--ink-soft);font-size:13.5px;margin-top:6px;max-width:680px}
+.card{background:var(--paper);border:1px solid var(--rule);border-radius:3px;padding:18px 20px;position:relative;box-shadow:var(--shadow)}
+.cp{padding:18px 20px}
+.g2{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.g3{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
+.g4{display:grid;grid-template-columns:repeat(4,1fr);gap:14px}
+@media (max-width:1100px){.g4{grid-template-columns:repeat(2,1fr)}.g3{grid-template-columns:1fr 1fr}}
+@media (max-width:680px){.g4,.g2,.g3{grid-template-columns:1fr}}
+.metric{background:var(--paper);border:1px solid var(--rule);border-radius:3px;padding:14px 18px;box-shadow:var(--shadow);position:relative}
+.mval{font-family:'Fraunces',serif;font-size:30px;font-weight:400;letter-spacing:-0.02em;color:var(--ink);line-height:1.1}
+.mlbl{font-size:10px;letter-spacing:.18em;text-transform:uppercase;color:var(--ink-soft);font-weight:600;margin-bottom:6px}
+.btn-n{background:var(--ink);color:#fff;border:none;padding:8px 16px;font-size:12.5px;font-family:'IBM Plex Sans',sans-serif;font-weight:500;letter-spacing:.04em;border-radius:2px;cursor:pointer;transition:background .15s}
+.btn-n:hover{background:var(--navy)}
+.btn-n:disabled{opacity:.45;cursor:not-allowed}
+.btn-g{background:transparent;color:var(--ink-soft);border:1px solid var(--rule-strong);padding:8px 14px;font-size:12.5px;font-family:'IBM Plex Sans',sans-serif;font-weight:500;border-radius:2px;cursor:pointer;transition:background .15s}
+.btn-g:hover{background:#f1ead9;color:var(--ink)}
+.btn-t{background:var(--accent);color:var(--ink);border:none;padding:8px 14px;font-size:12px;font-weight:600;font-family:'IBM Plex Sans',sans-serif;letter-spacing:.04em;border-radius:2px;cursor:pointer;transition:filter .15s}
+.btn-t:hover{filter:brightness(.94)}
+.btn-r{background:var(--bad-soft);color:var(--bad);border:1px solid #e7b8d0;padding:6px 12px;font-size:11.5px;font-weight:600;border-radius:2px;cursor:pointer;font-family:inherit}
+.btn-ok{background:var(--good-soft);color:var(--good);border:1px solid #a9dcae;padding:6px 12px;font-size:11.5px;font-weight:600;border-radius:2px;cursor:pointer;font-family:inherit}
+.inp{width:100%;padding:8px 12px;border-radius:2px;border:1px solid var(--rule-strong);font-size:13px;font-family:'IBM Plex Sans',sans-serif;background:var(--paper);color:var(--ink);outline:none;transition:border-color .15s}
+.inp:focus{border-color:var(--accent)}
+.lbl{font-size:11px;letter-spacing:.12em;text-transform:uppercase;font-weight:600;color:var(--ink-soft);display:block;margin-bottom:5px}
+.fld{margin-bottom:12px}
+.tbl{width:100%;border-collapse:collapse;font-size:13px;font-variant-numeric:tabular-nums}
+.tbl th{text-align:left;font-weight:600;font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-soft);border-bottom:1px solid var(--rule-strong);padding:10px 10px 8px;background:#faf6ee;white-space:nowrap}
+.tbl td{padding:9px 10px;border-bottom:1px solid var(--rule);font-size:13px}
+.tbl tr:last-child td{border-bottom:none}
+.tbl tr:nth-child(even) td{background:#fcfaf4}
+.tbl tr:hover td{background:#fbf6ea}
+.tbl-wrap{overflow-x:auto}
+.bdg{font-size:10.5px;padding:2px 8px;border-radius:2px;font-weight:500;display:inline-block;font-family:'IBM Plex Mono',monospace;letter-spacing:.02em}
+.awarn{background:var(--warn-soft);border:1px solid #e9d178;border-radius:3px;padding:10px 14px;font-size:13px;color:var(--warn);font-weight:500}
+.ared{background:var(--bad-soft);border:1px solid #e7b8d0;border-radius:3px;padding:9px 14px;font-size:13px;color:var(--bad);font-weight:500}
+.agood{background:var(--good-soft);border:1px solid #a9dcae;border-radius:3px;padding:9px 14px;font-size:13px;color:var(--good);font-weight:500}
+.mbg{position:fixed;inset:0;background:rgba(26,40,97,.45);backdrop-filter:blur(2px);z-index:1000;display:flex;align-items:center;justify-content:center;padding:20px}
+.mbox{background:var(--paper);border:1px solid var(--rule);border-radius:3px;width:600px;max-width:95vw;max-height:90vh;overflow:auto;box-shadow:0 24px 64px rgba(26,40,97,.35);position:relative}
+.mbdy{padding:24px}
+.mbdy h3{margin-bottom:16px}
+.delta{display:inline-flex;align-items:center;gap:3px;font-size:11px;font-weight:500;padding:1px 6px;border-radius:2px;font-family:'IBM Plex Mono',monospace}
+.delta.good{background:var(--good-soft);color:var(--good)}
+.delta.bad{background:var(--bad-soft);color:var(--bad)}
+.delta.neutral{background:#eee9dc;color:var(--ink-soft)}
+select,input,button,textarea{font-family:inherit}
+textarea.inp{resize:vertical;min-height:70px}
+.toast{position:fixed;top:20px;right:20px;background:#1B5E20;color:#fff;padding:9px 16px;border-radius:6px;z-index:9999;font-size:12px;font-weight:600;box-shadow:0 4px 14px rgba(0,0,0,0.2)}
+.toast.err{background:#B71C1C}
+
+/* ---- login screen ---- */
+.login-wrap{min-height:100vh;display:flex;align-items:center;justify-content:center;background:radial-gradient(circle at 30% 20%, #24347e 0%, var(--thrive-blue-dark) 55%, #101c4a 100%);padding:24px}
+.login-card{background:var(--paper);border-radius:4px;box-shadow:0 30px 80px rgba(10,16,50,.45);width:420px;max-width:100%;padding:38px 36px 32px;text-align:center}
+.login-card .mark{font-family:'Fraunces',serif;font-style:italic;font-size:30px;color:var(--thrive-blue-dark)}
+.login-card .sub{font-size:10.5px;letter-spacing:.24em;text-transform:uppercase;color:var(--muted);margin-top:4px;font-weight:600}
+.login-card h2{margin-top:22px;font-size:17px}
+.login-card .fld{text-align:left;margin-top:16px}
+.login-err{color:var(--bad);font-size:12.5px;margin-top:12px;min-height:16px;font-weight:500}
+
+/* ---- schedule grid ---- */
+.sched-wrap{overflow-x:auto;border:1px solid var(--rule);border-radius:3px}
+.sched-tbl{border-collapse:collapse;font-size:12px;min-width:1200px;width:100%}
+.sched-tbl th,.sched-tbl td{border:1px solid var(--rule);padding:5px 6px;text-align:center;white-space:nowrap}
+.sched-tbl th{background:#faf6ee;font-size:9.5px;text-transform:uppercase;letter-spacing:.04em;color:var(--ink-soft);font-weight:600}
+.sched-tbl td.name-cell{text-align:left;font-weight:600;background:#fff;position:sticky;left:0;z-index:2;min-width:150px}
+.sched-tbl th.name-cell{text-align:left;position:sticky;left:0;z-index:3;min-width:150px}
+.sched-tbl select.shift-sel{width:100%;border:none;background:transparent;font-family:'IBM Plex Mono',monospace;font-size:11px;font-weight:600;padding:4px 2px;text-align:center;text-align-last:center;border-radius:2px;cursor:pointer}
+.shift-8a{background:#e8edfa;color:#28398c}
+.shift-4p{background:#fbeec0;color:#8a6300}
+.shift-12a{background:#eadcf5;color:#5b258c}
+.shift-7a{background:#dcf0dc;color:#1e6e21}
+.shift-off{background:#f2eee3;color:#96917f}
+.shift-pto,.shift-sick{background:#f4dae8;color:#8c2d5a}
+.shift-blank{background:#fff}
+.cov-cell{font-weight:700}
+.cov-red{background:var(--bad-soft);color:var(--bad)}
+.cov-yellow{background:var(--warn-soft);color:var(--warn)}
+.cov-green{background:var(--good-soft);color:var(--good)}
+
+/* ---- supervision tree ---- */
+.tree{padding:10px 0}
+.tree-node{border:1px solid var(--rule);border-left:4px solid var(--thrive-blue);border-radius:3px;background:var(--paper);padding:10px 14px;margin-bottom:8px;box-shadow:var(--shadow)}
+.tree-node.mgr{border-left-color:var(--thrive-yellow)}
+.tree-node.lead{border-left-color:var(--thrive-pink)}
+.tree-children{margin-left:28px;padding-left:16px;border-left:2px dashed var(--rule-strong);margin-top:8px}
+.tree-name{font-weight:600;font-size:13.5px}
+.tree-role{font-size:10px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);font-weight:600}
+
+/* ---- role tabs on login ---- */
+.pill-row{display:flex;gap:6px;flex-wrap:wrap;justify-content:center;margin-top:14px}
+.pill-row .p{font-size:11px;padding:4px 10px;border-radius:12px;background:#f1ead9;color:var(--ink-soft);font-weight:600}
+</style>
+</head>
+<body>
+<div id="app"></div>
+
+<script>
+// ══════════════════════════════════════════════════════════
+// SUPABASE — same project as Director Hub / Community Hub / Personnel Hub.
+// This hub owns its own set of appdata keys (cc_*) so it never collides with
+// the clinical-program data those hubs read/write.
+// ══════════════════════════════════════════════════════════
+const SB_URL = 'https://fussjixekyhwuromauff.supabase.co';
+const SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZ1c3NqaXhla3lod3Vyb21hdWZmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI3MjMzNzYsImV4cCI6MjA5ODI5OTM3Nn0.3yfRu5LMDlIasvc0cu_GOcXAquji6ZYUkp3dgxk1j2M';
+const db = {
+  _h(){return{'Content-Type':'application/json','apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY,'Prefer':'return=representation'};},
+  async get(table,filter=''){
+    try{const r=await fetch(`${SB_URL}/rest/v1/${table}?${filter}`,{headers:this._h()});if(!r.ok)throw new Error(await r.text());return await r.json();}
+    catch(e){console.warn('[db.get]',e);return null;}
+  },
+  async upsert(table,row){
+    try{const r=await fetch(`${SB_URL}/rest/v1/${table}`,{method:'POST',headers:{...this._h(),'Prefer':'resolution=merge-duplicates,return=representation'},body:JSON.stringify(row)});if(!r.ok)throw new Error(await r.text());return await r.json();}
+    catch(e){console.warn('[db.upsert]',e);return null;}
+  }
+};
+
+// ══════════════════════════════════════════════════════════
+// SEED DATA — parsed from Crisis_Center_Staffing_Schedule_V3.xlsx (19 staff,
+// 3 pay periods: 9/12-9/25, 9/26-10/9, 10/10-10/23). Used only the first time
+// this hub ever runs (cc_staff/cc_schedule/cc_settings not found in Supabase
+// yet) — after that, Supabase is the source of truth for every viewer.
+// ══════════════════════════════════════════════════════════
+const SEED_STAFF = [{"id": 1, "name": "David Begly", "fn": "David", "ln": "Begly", "email": "dbegly@thrivepeersupport.com", "role": "manager", "shift": "7A-3P", "fte": 1, "weeklyTargetHours": null, "status": "Active", "teamLead": false, "dateOfHire": "2026-07-27", "notes": "", "supervisorId": null, "passcode": "1824"}, {"id": 2, "name": "Rondye Brown", "fn": "Rondye", "ln": "Brown", "email": "rbrown@thrivepeersupport.com", "role": "team_lead", "shift": "12A-8A", "fte": 1, "weeklyTargetHours": 40, "status": "Active", "teamLead": true, "dateOfHire": "2026-07-27", "notes": "Team Lead - 3rd shift", "supervisorId": 1, "passcode": "0409"}, {"id": 3, "name": "Michelle Macklin", "fn": "Michelle", "ln": "Macklin", "email": "mmacklin@thrivepeersupport.com", "role": "staff", "shift": "12A-8A", "fte": 1, "weeklyTargetHours": 40, "status": "Active", "teamLead": false, "dateOfHire": "2026-07-27", "notes": "7/20 start", "supervisorId": 2, "passcode": "4506"}, {"id": 4, "name": "Margaret Gross", "fn": "Margaret", "ln": "Gross", "email": "mgross@thrivepeersupport.com", "role": "staff", "shift": "12A-8A", "fte": 1, "weeklyTargetHours": 40, "status": "Onboarding", "teamLead": false, "dateOfHire": "2026-08-10", "notes": "", "supervisorId": 2, "passcode": "4012"}, {"id": 5, "name": "Donald Lykes", "fn": "Donald", "ln": "Lykes", "email": "dlykes@thrivepeersupport.com", "role": "staff", "shift": "12A-8A", "fte": 1, "weeklyTargetHours": 40, "status": "Pending Acceptance", "teamLead": false, "dateOfHire": "2026-08-10", "notes": "", "supervisorId": 2, "passcode": "3657"}, {"id": 6, "name": "Sky Kelley", "fn": "Sky", "ln": "Kelley", "email": "skelley@thrivepeersupport.com", "role": "staff", "shift": "4P-12A", "fte": 1, "weeklyTargetHours": 40, "status": "Active", "teamLead": false, "dateOfHire": "2026-07-27", "notes": "", "supervisorId": 9, "passcode": "2286"}, {"id": 7, "name": "Megan Pedala", "fn": "Megan", "ln": "Pedala", "email": "mpedala@thrivepeersupport.com", "role": "staff", "shift": "4P-12A", "fte": 1, "weeklyTargetHours": 40, "status": "Active", "teamLead": false, "dateOfHire": "2026-07-27", "notes": "", "supervisorId": 9, "passcode": "1679"}, {"id": 8, "name": "Melody Robertson", "fn": "Melody", "ln": "Robertson", "email": "mrobertson@thrivepeersupport.com", "role": "staff", "shift": "4P-12A", "fte": 1, "weeklyTargetHours": 40, "status": "Active", "teamLead": false, "dateOfHire": "2026-07-27", "notes": "7/20 start", "supervisorId": 9, "passcode": "8935"}, {"id": 9, "name": "Harold Watkins", "fn": "Harold", "ln": "Watkins", "email": "hwatkins@thrivepeersupport.com", "role": "team_lead", "shift": "4P-12A", "fte": 1, "weeklyTargetHours": 40, "status": "Active", "teamLead": true, "dateOfHire": "2026-07-27", "notes": "Team Lead - 2nd shift", "supervisorId": 1, "passcode": "1424"}, {"id": 10, "name": "Lily Madison", "fn": "Lily", "ln": "Madison", "email": "lmadison@thrivepeersupport.com", "role": "staff", "shift": "4P-12A", "fte": 1, "weeklyTargetHours": 40, "status": "Active", "teamLead": false, "dateOfHire": "2026-07-27", "notes": "7/20 start", "supervisorId": 9, "passcode": "9674"}, {"id": 11, "name": "Charles Christian", "fn": "Charles", "ln": "Christian", "email": "cchristian@thrivepeersupport.com", "role": "staff", "shift": "8A-4P", "fte": 1, "weeklyTargetHours": 40, "status": "Onboarding", "teamLead": false, "dateOfHire": "2026-08-10", "notes": "Shifted from 4p-12 to 8a-4p and full time per conversation 8/18", "supervisorId": 1, "passcode": "6912"}, {"id": 12, "name": "Mike Bailey", "fn": "Mike", "ln": "Bailey", "email": "mbailey@thrivepeersupport.com", "role": "staff", "shift": "8A-4P", "fte": 0.8, "weeklyTargetHours": 32, "status": "Active", "teamLead": false, "dateOfHire": "2026-07-27", "notes": "Target 32 hrs/week", "supervisorId": 1, "passcode": "0520"}, {"id": 13, "name": "Jayme Tuel", "fn": "Jayme", "ln": "Tuel", "email": "jtuel@thrivepeersupport.com", "role": "staff", "shift": "8A-4P", "fte": 1, "weeklyTargetHours": 40, "status": "Active", "teamLead": false, "dateOfHire": "2026-07-27", "notes": "", "supervisorId": 1, "passcode": "0488"}, {"id": 14, "name": "Jessica Weygandt", "fn": "Jessica", "ln": "Weygandt", "email": "jweygandt@thrivepeersupport.com", "role": "staff", "shift": "8A-4P", "fte": 1, "weeklyTargetHours": 40, "status": "Active", "teamLead": false, "dateOfHire": "2026-07-27", "notes": "", "supervisorId": 1, "passcode": "1535"}, {"id": 15, "name": "Jackie Kovach", "fn": "Jackie", "ln": "Kovach", "email": "jkovach@thrivepeersupport.com", "role": "staff", "shift": "8A-4P", "fte": 1, "weeklyTargetHours": 40, "status": "Active", "teamLead": false, "dateOfHire": "2026-07-27", "notes": "", "supervisorId": 1, "passcode": "3582"}, {"id": 16, "name": "Andre Calhoun", "fn": "Andre", "ln": "Calhoun", "email": "acalhoun@thrivepeersupport.com", "role": "staff", "shift": "Varies (see note)", "fte": 0.6, "weeklyTargetHours": 24, "status": "Active", "teamLead": false, "dateOfHire": "LAUNCH", "notes": "Target 24 hrs/week. Real availability: Wed/Thu 3p-10p, Fri 1p-10p or 3p-10p, Sat/Sun 7a-3p, no stated Mon/Tue availability. Approximated to the closest standard block for scheduling: Wed-Fri = 4P-12A, Sat-Sun = 8A-4P, Mon/Tue = OFF (auto-fills by weekday on each Pay Period tab). His real clock-in/out should follow his actual hours above, not the full block shown \u2014 he is not available for the full 4P-12A or 8A-4P window every one of those days.", "supervisorId": 1, "passcode": "3811"}, {"id": 17, "name": "LaVance Lining", "fn": "LaVance", "ln": "Lining", "email": "llining@thrivepeersupport.com", "role": "staff", "shift": "12A-8A", "fte": 1, "weeklyTargetHours": 40, "status": "Active", "teamLead": false, "dateOfHire": "2026-08-10", "notes": "", "supervisorId": 2, "passcode": "8279"}, {"id": 18, "name": "Erycka Allen", "fn": "Erycka", "ln": "Allen", "email": "eallen@thrivepeersupport.com", "role": "staff", "shift": "12A-8A", "fte": 1, "weeklyTargetHours": 40, "status": "Active", "teamLead": false, "dateOfHire": "2026-08-10", "notes": "", "supervisorId": 2, "passcode": "9863"}, {"id": 19, "name": "Garnell Jamison", "fn": "Garnell", "ln": "Jamison", "email": "gjamison@thrivepeersupport.com", "role": "staff", "shift": "12A-8A", "fte": 1, "weeklyTargetHours": 40, "status": "Active", "teamLead": false, "dateOfHire": "2026-08-10", "notes": "", "supervisorId": 2, "passcode": "0434"}];
+const SEED_SCHEDULE = {"periods": [{"id": "pp-2026-09-12", "label": "9/12 \u2013 9/25/26", "start": "2026-09-12", "end": "2026-09-25", "days": ["2026-09-12", "2026-09-13", "2026-09-14", "2026-09-15", "2026-09-16", "2026-09-17", "2026-09-18", "2026-09-19", "2026-09-20", "2026-09-21", "2026-09-22", "2026-09-23", "2026-09-24", "2026-09-25"], "entries": {"1": {"2026-09-12": "", "2026-09-13": "", "2026-09-14": "7A-3P", "2026-09-15": "7A-3P", "2026-09-16": "7A-3P", "2026-09-17": "7A-3P", "2026-09-18": "7A-3P", "2026-09-19": "OFF", "2026-09-20": "OFF", "2026-09-21": "7A-3P", "2026-09-22": "7A-3P", "2026-09-23": "7A-3P", "2026-09-24": "7A-3P", "2026-09-25": "7A-3P"}, "2": {"2026-09-12": "", "2026-09-13": "", "2026-09-14": "8A-4P", "2026-09-15": "8A-4P", "2026-09-16": "8A-4P", "2026-09-17": "8A-4P", "2026-09-18": "8A-4P", "2026-09-19": "OFF", "2026-09-20": "OFF", "2026-09-21": "8A-4P", "2026-09-22": "12A-8A", "2026-09-23": "12A-8A", "2026-09-24": "12A-8A", "2026-09-25": "12A-8A"}, "3": {"2026-09-12": "", "2026-09-13": "", "2026-09-14": "8A-4P", "2026-09-15": "8A-4P", "2026-09-16": "8A-4P", "2026-09-17": "8A-4P", "2026-09-18": "8A-4P", "2026-09-19": "OFF", "2026-09-20": "OFF", "2026-09-21": "8A-4P", "2026-09-22": "12A-8A", "2026-09-23": "12A-8A", "2026-09-24": "12A-8A", "2026-09-25": "12A-8A"}, "4": {"2026-09-12": "", "2026-09-13": "", "2026-09-14": "8A-4P", "2026-09-15": "8A-4P", "2026-09-16": "8A-4P", "2026-09-17": "8A-4P", "2026-09-18": "8A-4P", "2026-09-19": "OFF", "2026-09-20": "OFF", "2026-09-21": "8A-4P", "2026-09-22": "12A-8A", "2026-09-23": "12A-8A", "2026-09-24": "12A-8A", "2026-09-25": "12A-8A"}, "5": {"2026-09-12": "", "2026-09-13": "", "2026-09-14": "8A-4P", "2026-09-15": "8A-4P", "2026-09-16": "8A-4P", "2026-09-17": "8A-4P", "2026-09-18": "8A-4P", "2026-09-19": "OFF", "2026-09-20": "OFF", "2026-09-21": "8A-4P", "2026-09-22": "12A-8A", "2026-09-23": "12A-8A", "2026-09-24": "12A-8A", "2026-09-25": "12A-8A"}, "6": {"2026-09-12": "", "2026-09-13": "", "2026-09-14": "8A-4P", "2026-09-15": "8A-4P", "2026-09-16": "8A-4P", "2026-09-17": "8A-4P", "2026-09-18": "8A-4P", "2026-09-19": "OFF", "2026-09-20": "OFF", "2026-09-21": "4P-12A", "2026-09-22": "4P-12A", "2026-09-23": "4P-12A", "2026-09-24": "4P-12A", "2026-09-25": "4P-12A"}, "7": {"2026-09-12": "", "2026-09-13": "", "2026-09-14": "8A-4P", "2026-09-15": "8A-4P", "2026-09-16": "8A-4P", "2026-09-17": "8A-4P", "2026-09-18": "8A-4P", "2026-09-19": "OFF", "2026-09-20": "OFF", "2026-09-21": "4P-12A", "2026-09-22": "4P-12A", "2026-09-23": "4P-12A", "2026-09-24": "4P-12A", "2026-09-25": "4P-12A"}, "8": {"2026-09-12": "", "2026-09-13": "", "2026-09-14": "8A-4P", "2026-09-15": "8A-4P", "2026-09-16": "8A-4P", "2026-09-17": "8A-4P", "2026-09-18": "8A-4P", "2026-09-19": "OFF", "2026-09-20": "OFF", "2026-09-21": "4P-12A", "2026-09-22": "4P-12A", "2026-09-23": "4P-12A", "2026-09-24": "4P-12A", "2026-09-25": "4P-12A"}, "9": {"2026-09-12": "", "2026-09-13": "", "2026-09-14": "8A-4P", "2026-09-15": "8A-4P", "2026-09-16": "8A-4P", "2026-09-17": "8A-4P", "2026-09-18": "8A-4P", "2026-09-19": "OFF", "2026-09-20": "OFF", "2026-09-21": "4P-12A", "2026-09-22": "4P-12A", "2026-09-23": "4P-12A", "2026-09-24": "4P-12A", "2026-09-25": "4P-12A"}, "10": {"2026-09-12": "", "2026-09-13": "", "2026-09-14": "8A-4P", "2026-09-15": "8A-4P", "2026-09-16": "8A-4P", "2026-09-17": "8A-4P", "2026-09-18": "8A-4P", "2026-09-19": "OFF", "2026-09-20": "OFF", "2026-09-21": "4P-12A", "2026-09-22": "4P-12A", "2026-09-23": "4P-12A", "2026-09-24": "4P-12A", "2026-09-25": "4P-12A"}, "11": {"2026-09-12": "", "2026-09-13": "", "2026-09-14": "8A-4P", "2026-09-15": "8A-4P", "2026-09-16": "8A-4P", "2026-09-17": "8A-4P", "2026-09-18": "8A-4P", "2026-09-19": "OFF", "2026-09-20": "OFF", "2026-09-21": "8A-4P", "2026-09-22": "8A-4P", "2026-09-23": "8A-4P", "2026-09-24": "8A-4P", "2026-09-25": "8A-4P"}, "12": {"2026-09-12": "", "2026-09-13": "", "2026-09-14": "8A-4P", "2026-09-15": "8A-4P", "2026-09-16": "8A-4P", "2026-09-17": "8A-4P", "2026-09-18": "8A-4P", "2026-09-19": "OFF", "2026-09-20": "OFF", "2026-09-21": "8A-4P", "2026-09-22": "OFF", "2026-09-23": "8A-4P", "2026-09-24": "8A-4P", "2026-09-25": "8A-4P"}, "13": {"2026-09-12": "", "2026-09-13": "", "2026-09-14": "8A-4P", "2026-09-15": "8A-4P", "2026-09-16": "8A-4P", "2026-09-17": "8A-4P", "2026-09-18": "8A-4P", "2026-09-19": "OFF", "2026-09-20": "OFF", "2026-09-21": "8A-4P", "2026-09-22": "8A-4P", "2026-09-23": "8A-4P", "2026-09-24": "8A-4P", "2026-09-25": "8A-4P"}, "14": {"2026-09-12": "", "2026-09-13": "", "2026-09-14": "8A-4P", "2026-09-15": "8A-4P", "2026-09-16": "8A-4P", "2026-09-17": "8A-4P", "2026-09-18": "8A-4P", "2026-09-19": "OFF", "2026-09-20": "OFF", "2026-09-21": "8A-4P", "2026-09-22": "8A-4P", "2026-09-23": "8A-4P", "2026-09-24": "8A-4P", "2026-09-25": "8A-4P"}, "15": {"2026-09-12": "", "2026-09-13": "", "2026-09-14": "8A-4P", "2026-09-15": "8A-4P", "2026-09-16": "8A-4P", "2026-09-17": "8A-4P", "2026-09-18": "8A-4P", "2026-09-19": "OFF", "2026-09-20": "OFF", "2026-09-21": "8A-4P", "2026-09-22": "8A-4P", "2026-09-23": "8A-4P", "2026-09-24": "8A-4P", "2026-09-25": "8A-4P"}, "16": {"2026-09-12": "", "2026-09-13": "", "2026-09-14": "OFF", "2026-09-15": "OFF", "2026-09-16": "OFF", "2026-09-17": "OFF", "2026-09-18": "OFF", "2026-09-19": "OFF", "2026-09-20": "OFF", "2026-09-21": "OFF", "2026-09-22": "OFF", "2026-09-23": "4P-12A", "2026-09-24": "4P-12A", "2026-09-25": "4P-12A"}, "17": {"2026-09-12": "", "2026-09-13": "", "2026-09-14": "8A-4P", "2026-09-15": "8A-4P", "2026-09-16": "8A-4P", "2026-09-17": "8A-4P", "2026-09-18": "8A-4P", "2026-09-19": "OFF", "2026-09-20": "OFF", "2026-09-21": "8A-4P", "2026-09-22": "12A-8A", "2026-09-23": "12A-8A", "2026-09-24": "12A-8A", "2026-09-25": "12A-8A"}, "18": {"2026-09-12": "", "2026-09-13": "", "2026-09-14": "8A-4P", "2026-09-15": "8A-4P", "2026-09-16": "8A-4P", "2026-09-17": "8A-4P", "2026-09-18": "8A-4P", "2026-09-19": "OFF", "2026-09-20": "OFF", "2026-09-21": "8A-4P", "2026-09-22": "12A-8A", "2026-09-23": "12A-8A", "2026-09-24": "12A-8A", "2026-09-25": "12A-8A"}, "19": {"2026-09-12": "OFF", "2026-09-13": "OFF", "2026-09-14": "8A-4P", "2026-09-15": "8A-4P", "2026-09-16": "8A-4P", "2026-09-17": "8A-4P", "2026-09-18": "8A-4P", "2026-09-19": "OFF", "2026-09-20": "OFF", "2026-09-21": "8A-4P", "2026-09-22": "12A-8A", "2026-09-23": "12A-8A", "2026-09-24": "12A-8A", "2026-09-25": "12A-8A"}}}, {"id": "pp-2026-09-26", "label": "9/26 \u2013 10/9/26", "start": "2026-09-26", "end": "2026-10-09", "days": ["2026-09-26", "2026-09-27", "2026-09-28", "2026-09-29", "2026-09-30", "2026-10-01", "2026-10-02", "2026-10-03", "2026-10-04", "2026-10-05", "2026-10-06", "2026-10-07", "2026-10-08", "2026-10-09"], "entries": {"1": {"2026-09-26": "OFF", "2026-09-27": "OFF", "2026-09-28": "7A-3P", "2026-09-29": "7A-3P", "2026-09-30": "7A-3P", "2026-10-01": "7A-3P", "2026-10-02": "7A-3P", "2026-10-03": "OFF", "2026-10-04": "OFF", "2026-10-05": "7A-3P", "2026-10-06": "7A-3P", "2026-10-07": "7A-3P", "2026-10-08": "7A-3P", "2026-10-09": "7A-3P"}, "2": {"2026-09-26": "OFF", "2026-09-27": "OFF", "2026-09-28": "12A-8A", "2026-09-29": "12A-8A", "2026-09-30": "12A-8A", "2026-10-01": "12A-8A", "2026-10-02": "12A-8A", "2026-10-03": "OFF", "2026-10-04": "OFF", "2026-10-05": "12A-8A", "2026-10-06": "12A-8A", "2026-10-07": "12A-8A", "2026-10-08": "12A-8A", "2026-10-09": "12A-8A"}, "3": {"2026-09-26": "OFF", "2026-09-27": "OFF", "2026-09-28": "12A-8A", "2026-09-29": "12A-8A", "2026-09-30": "12A-8A", "2026-10-01": "12A-8A", "2026-10-02": "12A-8A", "2026-10-03": "OFF", "2026-10-04": "OFF", "2026-10-05": "12A-8A", "2026-10-06": "12A-8A", "2026-10-07": "12A-8A", "2026-10-08": "12A-8A", "2026-10-09": "12A-8A"}, "4": {"2026-09-26": "12A-8A", "2026-09-27": "OFF", "2026-09-28": "OFF", "2026-09-29": "12A-8A", "2026-09-30": "12A-8A", "2026-10-01": "12A-8A", "2026-10-02": "12A-8A", "2026-10-03": "12A-8A", "2026-10-04": "OFF", "2026-10-05": "OFF", "2026-10-06": "12A-8A", "2026-10-07": "12A-8A", "2026-10-08": "12A-8A", "2026-10-09": "12A-8A"}, "5": {"2026-09-26": "12A-8A", "2026-09-27": "12A-8A", "2026-09-28": "12A-8A", "2026-09-29": "OFF", "2026-09-30": "OFF", "2026-10-01": "12A-8A", "2026-10-02": "12A-8A", "2026-10-03": "12A-8A", "2026-10-04": "12A-8A", "2026-10-05": "12A-8A", "2026-10-06": "OFF", "2026-10-07": "OFF", "2026-10-08": "12A-8A", "2026-10-09": "12A-8A"}, "6": {"2026-09-26": "4P-12A", "2026-09-27": "4P-12A", "2026-09-28": "4P-12A", "2026-09-29": "4P-12A", "2026-09-30": "OFF", "2026-10-01": "OFF", "2026-10-02": "4P-12A", "2026-10-03": "4P-12A", "2026-10-04": "4P-12A", "2026-10-05": "4P-12A", "2026-10-06": "4P-12A", "2026-10-07": "OFF", "2026-10-08": "OFF", "2026-10-09": "4P-12A"}, "7": {"2026-09-26": "OFF", "2026-09-27": "4P-12A", "2026-09-28": "4P-12A", "2026-09-29": "4P-12A", "2026-09-30": "4P-12A", "2026-10-01": "4P-12A", "2026-10-02": "OFF", "2026-10-03": "OFF", "2026-10-04": "4P-12A", "2026-10-05": "4P-12A", "2026-10-06": "4P-12A", "2026-10-07": "4P-12A", "2026-10-08": "4P-12A", "2026-10-09": "OFF"}, "8": {"2026-09-26": "4P-12A", "2026-09-27": "OFF", "2026-09-28": "OFF", "2026-09-29": "4P-12A", "2026-09-30": "4P-12A", "2026-10-01": "4P-12A", "2026-10-02": "4P-12A", "2026-10-03": "4P-12A", "2026-10-04": "OFF", "2026-10-05": "OFF", "2026-10-06": "4P-12A", "2026-10-07": "4P-12A", "2026-10-08": "4P-12A", "2026-10-09": "4P-12A"}, "9": {"2026-09-26": "OFF", "2026-09-27": "OFF", "2026-09-28": "4P-12A", "2026-09-29": "4P-12A", "2026-09-30": "4P-12A", "2026-10-01": "4P-12A", "2026-10-02": "4P-12A", "2026-10-03": "OFF", "2026-10-04": "OFF", "2026-10-05": "4P-12A", "2026-10-06": "4P-12A", "2026-10-07": "4P-12A", "2026-10-08": "4P-12A", "2026-10-09": "4P-12A"}, "10": {"2026-09-26": "4P-12A", "2026-09-27": "4P-12A", "2026-09-28": "OFF", "2026-09-29": "OFF", "2026-09-30": "4P-12A", "2026-10-01": "4P-12A", "2026-10-02": "4P-12A", "2026-10-03": "4P-12A", "2026-10-04": "4P-12A", "2026-10-05": "OFF", "2026-10-06": "OFF", "2026-10-07": "4P-12A", "2026-10-08": "4P-12A", "2026-10-09": "4P-12A"}, "11": {"2026-09-26": "OFF", "2026-09-27": "OFF", "2026-09-28": "OFF", "2026-09-29": "8A-4P", "2026-09-30": "8A-4P", "2026-10-01": "8A-4P", "2026-10-02": "8A-4P", "2026-10-03": "8A-4P", "2026-10-04": "8A-4P", "2026-10-05": "OFF", "2026-10-06": "8A-4P", "2026-10-07": "8A-4P", "2026-10-08": "8A-4P", "2026-10-09": "8A-4P"}, "12": {"2026-09-26": "8A-4P", "2026-09-27": "OFF", "2026-09-28": "8A-4P", "2026-09-29": "OFF", "2026-09-30": "OFF", "2026-10-01": "8A-4P", "2026-10-02": "8A-4P", "2026-10-03": "8A-4P", "2026-10-04": "OFF", "2026-10-05": "8A-4P", "2026-10-06": "OFF", "2026-10-07": "OFF", "2026-10-08": "8A-4P", "2026-10-09": "8A-4P"}, "13": {"2026-09-26": "OFF", "2026-09-27": "8A-4P", "2026-09-28": "8A-4P", "2026-09-29": "8A-4P", "2026-09-30": "8A-4P", "2026-10-01": "8A-4P", "2026-10-02": "OFF", "2026-10-03": "OFF", "2026-10-04": "8A-4P", "2026-10-05": "8A-4P", "2026-10-06": "8A-4P", "2026-10-07": "8A-4P", "2026-10-08": "8A-4P", "2026-10-09": "OFF"}, "14": {"2026-09-26": "OFF", "2026-09-27": "OFF", "2026-09-28": "8A-4P", "2026-09-29": "8A-4P", "2026-09-30": "8A-4P", "2026-10-01": "8A-4P", "2026-10-02": "8A-4P", "2026-10-03": "OFF", "2026-10-04": "OFF", "2026-10-05": "8A-4P", "2026-10-06": "8A-4P", "2026-10-07": "8A-4P", "2026-10-08": "8A-4P", "2026-10-09": "8A-4P"}, "15": {"2026-09-26": "OFF", "2026-09-27": "OFF", "2026-09-28": "8A-4P", "2026-09-29": "8A-4P", "2026-09-30": "8A-4P", "2026-10-01": "8A-4P", "2026-10-02": "8A-4P", "2026-10-03": "OFF", "2026-10-04": "OFF", "2026-10-05": "8A-4P", "2026-10-06": "8A-4P", "2026-10-07": "8A-4P", "2026-10-08": "8A-4P", "2026-10-09": "8A-4P"}, "16": {"2026-09-26": "8A-4P", "2026-09-27": "8A-4P", "2026-09-28": "OFF", "2026-09-29": "OFF", "2026-09-30": "4P-12A", "2026-10-01": "4P-12A", "2026-10-02": "4P-12A", "2026-10-03": "8A-4P", "2026-10-04": "8A-4P", "2026-10-05": "OFF", "2026-10-06": "OFF", "2026-10-07": "4P-12A", "2026-10-08": "4P-12A", "2026-10-09": "OFF"}, "17": {"2026-09-26": "OFF", "2026-09-27": "12A-8A", "2026-09-28": "12A-8A", "2026-09-29": "12A-8A", "2026-09-30": "12A-8A", "2026-10-01": "12A-8A", "2026-10-02": "OFF", "2026-10-03": "OFF", "2026-10-04": "12A-8A", "2026-10-05": "12A-8A", "2026-10-06": "12A-8A", "2026-10-07": "12A-8A", "2026-10-08": "12A-8A", "2026-10-09": "OFF"}, "18": {"2026-09-26": "12A-8A", "2026-09-27": "OFF", "2026-09-28": "12A-8A", "2026-09-29": "12A-8A", "2026-09-30": "12A-8A", "2026-10-01": "OFF", "2026-10-02": "12A-8A", "2026-10-03": "12A-8A", "2026-10-04": "OFF", "2026-10-05": "12A-8A", "2026-10-06": "12A-8A", "2026-10-07": "12A-8A", "2026-10-08": "OFF", "2026-10-09": "12A-8A"}, "19": {"2026-09-26": "12A-8A", "2026-09-27": "12A-8A", "2026-09-28": "12A-8A", "2026-09-29": "12A-8A", "2026-09-30": "12A-8A", "2026-10-01": "OFF", "2026-10-02": "OFF", "2026-10-03": "12A-8A", "2026-10-04": "12A-8A", "2026-10-05": "12A-8A", "2026-10-06": "12A-8A", "2026-10-07": "12A-8A", "2026-10-08": "OFF", "2026-10-09": "OFF"}}}, {"id": "pp-2026-10-10", "label": "10/10 \u2013 10/23/26", "start": "2026-10-10", "end": "2026-10-23", "days": ["2026-10-10", "2026-10-11", "2026-10-12", "2026-10-13", "2026-10-14", "2026-10-15", "2026-10-16", "2026-10-17", "2026-10-18", "2026-10-19", "2026-10-20", "2026-10-21", "2026-10-22", "2026-10-23"], "entries": {"1": {"2026-10-10": "OFF", "2026-10-11": "OFF", "2026-10-12": "7A-3P", "2026-10-13": "7A-3P", "2026-10-14": "7A-3P", "2026-10-15": "7A-3P", "2026-10-16": "7A-3P", "2026-10-17": "OFF", "2026-10-18": "OFF", "2026-10-19": "7A-3P", "2026-10-20": "7A-3P", "2026-10-21": "7A-3P", "2026-10-22": "7A-3P", "2026-10-23": "7A-3P"}, "2": {"2026-10-10": "OFF", "2026-10-11": "OFF", "2026-10-12": "12A-8A", "2026-10-13": "12A-8A", "2026-10-14": "12A-8A", "2026-10-15": "12A-8A", "2026-10-16": "12A-8A", "2026-10-17": "OFF", "2026-10-18": "OFF", "2026-10-19": "12A-8A", "2026-10-20": "12A-8A", "2026-10-21": "12A-8A", "2026-10-22": "12A-8A", "2026-10-23": "12A-8A"}, "3": {"2026-10-10": "OFF", "2026-10-11": "OFF", "2026-10-12": "12A-8A", "2026-10-13": "12A-8A", "2026-10-14": "12A-8A", "2026-10-15": "12A-8A", "2026-10-16": "12A-8A", "2026-10-17": "12A-8A", "2026-10-18": "", "2026-10-19": "", "2026-10-20": "12A-8A", "2026-10-21": "12A-8A", "2026-10-22": "12A-8A", "2026-10-23": "12A-8A"}, "4": {"2026-10-10": "12A-8A", "2026-10-11": "OFF", "2026-10-12": "OFF", "2026-10-13": "12A-8A", "2026-10-14": "12A-8A", "2026-10-15": "", "2026-10-16": "", "2026-10-17": "12A-8A", "2026-10-18": "12A-8A", "2026-10-19": "12A-8A", "2026-10-20": "12A-8A", "2026-10-21": "12A-8A", "2026-10-22": "", "2026-10-23": ""}, "5": {"2026-10-10": "12A-8A", "2026-10-11": "12A-8A", "2026-10-12": "12A-8A", "2026-10-13": "", "2026-10-14": "", "2026-10-15": "12A-8A", "2026-10-16": "12A-8A", "2026-10-17": "12A-8A", "2026-10-18": "12A-8A", "2026-10-19": "", "2026-10-20": "", "2026-10-21": "12A-8A", "2026-10-22": "12A-8A", "2026-10-23": "12A-8A"}, "6": {"2026-10-10": "", "2026-10-11": "4P-12A", "2026-10-12": "4P-12A", "2026-10-13": "4P-12A", "2026-10-14": "4P-12A", "2026-10-15": "4P-12A", "2026-10-16": "", "2026-10-17": "", "2026-10-18": "4P-12A", "2026-10-19": "4P-12A", "2026-10-20": "4P-12A", "2026-10-21": "4P-12A", "2026-10-22": "4P-12A", "2026-10-23": ""}, "7": {"2026-10-10": "4P-12A", "2026-10-11": "", "2026-10-12": "", "2026-10-13": "4P-12A", "2026-10-14": "4P-12A", "2026-10-15": "4P-12A", "2026-10-16": "4P-12A", "2026-10-17": "4P-12A", "2026-10-18": "", "2026-10-19": "", "2026-10-20": "4P-12A", "2026-10-21": "4P-12A", "2026-10-22": "4P-12A", "2026-10-23": "4P-12A"}, "8": {"2026-10-10": "4P-12A", "2026-10-11": "4P-12A", "2026-10-12": "4P-12A", "2026-10-13": "4P-12A", "2026-10-14": "4P-12A", "2026-10-15": "", "2026-10-16": "", "2026-10-17": "4P-12A", "2026-10-18": "4P-12A", "2026-10-19": "4P-12A", "2026-10-20": "4P-12A", "2026-10-21": "4P-12A", "2026-10-22": "", "2026-10-23": ""}, "9": {"2026-10-10": "", "2026-10-11": "", "2026-10-12": "4P-12A", "2026-10-13": "4P-12A", "2026-10-14": "4P-12A", "2026-10-15": "4P-12A", "2026-10-16": "4P-12A", "2026-10-17": "", "2026-10-18": "", "2026-10-19": "4P-12A", "2026-10-20": "4P-12A", "2026-10-21": "4P-12A", "2026-10-22": "4P-12A", "2026-10-23": "4P-12A"}, "10": {"2026-10-10": "4P-12A", "2026-10-11": "4P-12A", "2026-10-12": "4P-12A", "2026-10-13": "4P-12A", "2026-10-14": "", "2026-10-15": "", "2026-10-16": "4P-12A", "2026-10-17": "4P-12A", "2026-10-18": "4P-12A", "2026-10-19": "4P-12A", "2026-10-20": "4P-12A", "2026-10-21": "", "2026-10-22": "", "2026-10-23": "4P-12A"}, "11": {"2026-10-10": "4P-12A", "2026-10-11": "4P-12A", "2026-10-12": "", "2026-10-13": "", "2026-10-14": "", "2026-10-15": "4P-12A", "2026-10-16": "4P-12A", "2026-10-17": "4P-12A", "2026-10-18": "4P-12A", "2026-10-19": "", "2026-10-20": "", "2026-10-21": "", "2026-10-22": "4P-12A", "2026-10-23": "4P-12A"}, "12": {"2026-10-10": "8A-4P", "2026-10-11": "", "2026-10-12": "", "2026-10-13": "", "2026-10-14": "8A-4P", "2026-10-15": "8A-4P", "2026-10-16": "8A-4P", "2026-10-17": "8A-4P", "2026-10-18": "", "2026-10-19": "", "2026-10-20": "", "2026-10-21": "8A-4P", "2026-10-22": "8A-4P", "2026-10-23": "8A-4P"}, "13": {"2026-10-10": "8A-4P", "2026-10-11": "8A-4P", "2026-10-12": "8A-4P", "2026-10-13": "8A-4P", "2026-10-14": "", "2026-10-15": "", "2026-10-16": "8A-4P", "2026-10-17": "8A-4P", "2026-10-18": "8A-4P", "2026-10-19": "8A-4P", "2026-10-20": "8A-4P", "2026-10-21": "", "2026-10-22": "", "2026-10-23": "8A-4P"}, "14": {"2026-10-10": "OFF", "2026-10-11": "8A-4P", "2026-10-12": "8A-4P", "2026-10-13": "8A-4P", "2026-10-14": "8A-4P", "2026-10-15": "8A-4P", "2026-10-16": "OFF", "2026-10-17": "OFF", "2026-10-18": "OFF", "2026-10-19": "8A-4P", "2026-10-20": "8A-4P", "2026-10-21": "8A-4P", "2026-10-22": "8A-4P", "2026-10-23": "8A-4P"}, "15": {"2026-10-10": "", "2026-10-11": "8A-4P", "2026-10-12": "8A-4P", "2026-10-13": "8A-4P", "2026-10-14": "8A-4P", "2026-10-15": "8A-4P", "2026-10-16": "", "2026-10-17": "", "2026-10-18": "8A-4P", "2026-10-19": "8A-4P", "2026-10-20": "8A-4P", "2026-10-21": "8A-4P", "2026-10-22": "8A-4P", "2026-10-23": ""}, "16": {"2026-10-10": "", "2026-10-11": "", "2026-10-12": "", "2026-10-13": "", "2026-10-14": "4P-12A", "2026-10-15": "4P-12A", "2026-10-16": "4P-12A", "2026-10-17": "", "2026-10-18": "", "2026-10-19": "", "2026-10-20": "", "2026-10-21": "4P-12A", "2026-10-22": "4P-12A", "2026-10-23": "4P-12A"}, "17": {"2026-10-10": "8A-4P", "2026-10-11": "", "2026-10-12": "", "2026-10-13": "8A-4P", "2026-10-14": "8A-4P", "2026-10-15": "8A-4P", "2026-10-16": "8A-4P", "2026-10-17": "8A-4P", "2026-10-18": "", "2026-10-19": "", "2026-10-20": "8A-4P", "2026-10-21": "8A-4P", "2026-10-22": "8A-4P", "2026-10-23": "8A-4P"}, "18": {"2026-10-10": "8A-4P", "2026-10-11": "8A-4P", "2026-10-12": "8A-4P", "2026-10-13": "8A-4P", "2026-10-14": "8A-4P", "2026-10-15": "", "2026-10-16": "", "2026-10-17": "8A-4P", "2026-10-18": "8A-4P", "2026-10-19": "8A-4P", "2026-10-20": "8A-4P", "2026-10-21": "8A-4P", "2026-10-22": "", "2026-10-23": ""}, "19": {"2026-10-10": "12A-8A", "2026-10-11": "12A-8A", "2026-10-12": "12A-8A", "2026-10-13": "12A-8A", "2026-10-14": "12A-8A", "2026-10-15": "12A-8A", "2026-10-16": "12A-8A", "2026-10-17": "12A-8A", "2026-10-18": "12A-8A", "2026-10-19": "12A-8A", "2026-10-20": "12A-8A", "2026-10-21": "12A-8A", "2026-10-22": "12A-8A", "2026-10-23": "12A-8A"}}}]};
+const SEED_SETTINGS = {"orgName": "Thrive Crisis Center", "ukgUrl": "", "fteBudget": 18, "hoursPerFte": 80, "minPerShift": 2, "targetPerShift": 4};
+const SEED_REQUESTS = [];
+const SEED_SUPERVISION = [];
+
+const HOURS_PER_SHIFT = {'7A-3P':8,'8A-4P':8,'4P-12A':8,'12A-8A':8,'OFF':0,'PTO':8,'SICK':8,'':0};
+const SHIFT_OPTIONS = ['','7A-3P','8A-4P','4P-12A','12A-8A','OFF','PTO','SICK'];
+const SHIFT_CLASS = {'7A-3P':'shift-7a','8A-4P':'shift-8a','4P-12A':'shift-4p','12A-8A':'shift-12a','OFF':'shift-off','PTO':'shift-pto','SICK':'shift-sick','':'shift-blank'};
+const STATUS_COLOR = {'Active':'good','Onboarding':'warn','Pending Acceptance':'warn','Inactive':'bad'};
+
+let STAFF = [], SCHEDULE = {periods:[]}, REQUESTS = [], SUPERVISION = [], SETTINGS = {};
+let CURRENT = null; // logged-in staff record (with role)
+let VIEW = 'dashboard';
+let ACTIVE_PERIOD = null;
+let LIVE = false; // true once we've confirmed a real Supabase read succeeded
+let PENDING_SCHED_EDITS = {}; // {staffId: {date: code}} batched until Save
+
+function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+function toast(msg,isErr){const t=document.createElement('div');t.className='toast'+(isErr?' err':'');t.textContent=msg;document.body.appendChild(t);setTimeout(()=>t.remove(),2400);}
+function byId(id){return STAFF.find(s=>s.id===id);}
+function nameOf(id){const s=byId(id);return s?s.name:'—';}
+
+// ══════════════════════════════════════════════════════════
+// LOAD / SAVE
+// ══════════════════════════════════════════════════════════
+async function loadAll(){
+  const rows = await db.get('appdata','key=in.(cc_staff,cc_schedule,cc_requests,cc_supervision,cc_settings)');
+  const byKey = {};
+  if(rows){ LIVE = true; rows.forEach(r=>{ try{byKey[r.key]=JSON.parse(r.value);}catch(e){} }); }
+  STAFF = (byKey.cc_staff && byKey.cc_staff.length) ? byKey.cc_staff : SEED_STAFF;
+  SCHEDULE = byKey.cc_schedule || SEED_SCHEDULE;
+  REQUESTS = byKey.cc_requests || SEED_REQUESTS;
+  SUPERVISION = byKey.cc_supervision || SEED_SUPERVISION;
+  SETTINGS = byKey.cc_settings || SEED_SETTINGS;
+  ACTIVE_PERIOD = SCHEDULE.periods[SCHEDULE.periods.length-1]?.id;
+  // self-seed Supabase on first-ever run so every future viewer reads real data
+  const needSeed = !byKey.cc_staff || !byKey.cc_schedule || !byKey.cc_settings;
+  if(needSeed && rows!==null){
+    if(!byKey.cc_staff) db.upsert('appdata',{key:'cc_staff',value:JSON.stringify(STAFF)});
+    if(!byKey.cc_schedule) db.upsert('appdata',{key:'cc_schedule',value:JSON.stringify(SCHEDULE)});
+    if(!byKey.cc_requests) db.upsert('appdata',{key:'cc_requests',value:JSON.stringify(REQUESTS)});
+    if(!byKey.cc_supervision) db.upsert('appdata',{key:'cc_supervision',value:JSON.stringify(SUPERVISION)});
+    if(!byKey.cc_settings) db.upsert('appdata',{key:'cc_settings',value:JSON.stringify(SETTINGS)});
+  }
+}
+async function saveStaff(){ await db.upsert('appdata',{key:'cc_staff',value:JSON.stringify(STAFF)}); }
+async function saveSchedule(){ await db.upsert('appdata',{key:'cc_schedule',value:JSON.stringify(SCHEDULE)}); }
+async function saveRequests(){ await db.upsert('appdata',{key:'cc_requests',value:JSON.stringify(REQUESTS)}); }
+async function saveSupervision(){ await db.upsert('appdata',{key:'cc_supervision',value:JSON.stringify(SUPERVISION)}); }
+async function saveSettings(){ await db.upsert('appdata',{key:'cc_settings',value:JSON.stringify(SETTINGS)}); }
+
+// ══════════════════════════════════════════════════════════
+// ROLE / PERMISSION HELPERS
+// ══════════════════════════════════════════════════════════
+function isManager(){return CURRENT && CURRENT.role==='manager';}
+function isTeamLead(){return CURRENT && CURRENT.role==='team_lead';}
+function canEditRoster(){return isManager();}
+function canEditSchedule(){return isManager()||isTeamLead();}
+function canSeeSettings(){return isManager();}
+function reportsOf(staffId){return STAFF.filter(s=>s.supervisorId===staffId).map(s=>s.id);}
+function isSupervisorOf(supId,staffId){
+  let cur = byId(staffId);
+  let guard=0;
+  while(cur && cur.supervisorId!=null && guard<20){
+    if(cur.supervisorId===supId) return true;
+    cur = byId(cur.supervisorId); guard++;
+  }
+  return false;
+}
+function visibleStaffFor(){
+  if(isManager()) return STAFF.slice();
+  if(isTeamLead()) return STAFF.filter(s=>s.id===CURRENT.id||s.supervisorId===CURRENT.id);
+  return STAFF.filter(s=>s.id===CURRENT.id);
+}
+
+// ══════════════════════════════════════════════════════════
+// LOGIN
+// ══════════════════════════════════════════════════════════
+function renderLoading(){
+  document.getElementById('app').innerHTML = `<div class="login-wrap"><div class="login-card"><div class="mark">Thrive</div><div class="sub">Crisis Center</div><h2 style="margin-top:18px;color:var(--muted);font-weight:400">Loading…</h2></div></div>`;
+}
+function renderLogin(err){
+  const loginEligible = STAFF.filter(s=>s.status==='Active'||s.status==='Onboarding').sort((a,b)=>a.name.localeCompare(b.name));
+  document.getElementById('app').innerHTML = `
+  <div class="login-wrap">
+    <div class="login-card">
+      <div class="mark">Thrive</div>
+      <div class="sub">Crisis Center · Manager Hub</div>
+      <h2>Sign in</h2>
+      <div class="fld">
+        <label class="lbl">Name</label>
+        <select class="inp" id="loginName">
+          <option value="">Select your name…</option>
+          ${loginEligible.map(s=>`<option value="${s.id}">${esc(s.name)}</option>`).join('')}
+        </select>
+      </div>
+      <div class="fld">
+        <label class="lbl">Passcode</label>
+        <input class="inp mono" id="loginCode" type="password" inputmode="numeric" maxlength="4" placeholder="••••" onkeydown="if(event.key==='Enter')doLogin()">
+      </div>
+      <button class="btn-n" style="width:100%;padding:10px;margin-top:6px" onclick="doLogin()">Sign in</button>
+      <div class="login-err">${err?esc(err):''}</div>
+      <div class="pill-row">
+        <span class="p">${LIVE?'● Live data':'○ Offline seed data'}</span>
+      </div>
+    </div>
+  </div>`;
+}
+function doLogin(){
+  const idSel = document.getElementById('loginName');
+  const codeEl = document.getElementById('loginCode');
+  const id = parseInt(idSel.value,10);
+  const code = (codeEl.value||'').trim();
+  if(!id){ renderLogin('Pick your name from the list.'); return; }
+  const s = byId(id);
+  if(!s || (s.passcode||'')!==code){ renderLogin('That passcode does not match. Try again.'); return; }
+  CURRENT = s;
+  VIEW = 'dashboard';
+  renderShell();
+}
+function logout(){ CURRENT=null; renderLogin(); }
+
+// ══════════════════════════════════════════════════════════
+// SHELL / NAV
+// ══════════════════════════════════════════════════════════
+const NAV_ITEMS = [
+  {k:'dashboard', label:'Dashboard'},
+  {k:'roster', label:'Staff Roster'},
+  {k:'schedule', label:'Schedule'},
+  {k:'requests', label:'Shift Requests'},
+  {k:'supervision', label:'Supervision'},
+  {k:'tree', label:'Supervision Tree'},
+  {k:'ukg', label:'UKG'},
+  {k:'settings', label:'Settings', mgrOnly:true},
+];
+function nav(v){ VIEW=v; renderShell(); }
+function renderShell(){
+  const app = document.getElementById('app');
+  app.innerHTML = `
+  <div class="shell">
+    <nav class="side" id="sidebar"></nav>
+    <div style="display:flex;flex-direction:column;min-width:0">
+      <header class="topbar" id="hdr"></header>
+      <main id="view"></main>
+    </div>
+  </div>`;
+  renderSidebar();
+  renderTopbar();
+  renderView();
+}
+function renderSidebar(){
+  const items = NAV_ITEMS.filter(i=>!i.mgrOnly || isManager());
+  document.getElementById('sidebar').innerHTML = `
+    <div class="brand"><div class="text"><span class="mark">Thrive</span><span class="sub">Crisis Center</span></div></div>
+    <div class="group">Manager Hub</div>
+    ${items.map(i=>`<button class="nav-item ${VIEW===i.k?'active':''}" onclick="nav('${i.k}')"><span class="dot"></span>${i.label}</button>`).join('')}
+    <div class="footer"><strong>${esc(CURRENT.name)}</strong><br>${roleLabel(CURRENT)}</div>
+  `;
+}
+function roleLabel(s){
+  if(s.role==='manager') return 'Manager';
+  if(s.role==='team_lead') return 'Team Lead — '+esc(s.shift);
+  return 'Staff — '+esc(s.shift);
+}
+function renderTopbar(){
+  const item = NAV_ITEMS.find(i=>i.k===VIEW);
+  document.getElementById('hdr').innerHTML = `
+    <div class="ctx">
+      <span class="where">${item?item.label:''}</span>
+      <span class="pill ${LIVE?'live':'seed'}">${LIVE?'● LIVE · SUPABASE':'○ SEED DATA'}</span>
+    </div>
+    <div style="display:flex;align-items:center;gap:10px;position:relative">
+      <button class="role-btn" onclick="toggleUserMenu(event)">
+        <span class="lbl">${roleLabel(CURRENT)}</span>
+        <span class="val">${esc(CURRENT.name)}</span>
+      </button>
+      <div id="userMenu"></div>
+    </div>
+  `;
+}
+function toggleUserMenu(ev){
+  const el = document.getElementById('userMenu');
+  if(el.innerHTML){ el.innerHTML=''; return; }
+  el.innerHTML = `<div class="menu-dd" style="right:28px;top:52px;position:absolute"><button onclick="logout()">Sign out</button></div>`;
+}
+document.addEventListener('click',(e)=>{
+  if(!e.target.closest('.role-btn') && !e.target.closest('.menu-dd')){
+    const el=document.getElementById('userMenu'); if(el) el.innerHTML='';
+  }
+});
+function renderView(){
+  const v = document.getElementById('view');
+  const fns = {
+    dashboard: viewDashboard, roster: viewRoster, schedule: viewSchedule,
+    requests: viewRequests, supervision: viewSupervision, tree: viewTree,
+    ukg: viewUkg, settings: viewSettings,
+  };
+  v.innerHTML = (fns[VIEW]||viewDashboard)();
+}
+
+// ══════════════════════════════════════════════════════════
+// SCHEDULE HELPERS
+// ══════════════════════════════════════════════════════════
+function period(id){return SCHEDULE.periods.find(p=>p.id===id);}
+function shiftFor(p,staffId,date){
+  const edit = PENDING_SCHED_EDITS[staffId] && PENDING_SCHED_EDITS[staffId][date];
+  if(edit!==undefined) return edit;
+  return (p.entries[staffId]&&p.entries[staffId][date]) || '';
+}
+function totalsFor(p,s){
+  if(s.role==='manager') return {total:null,target:null,variance:null};
+  let total=0;
+  p.days.forEach(d=>{ total += HOURS_PER_SHIFT[shiftFor(p,s.id,d)]||0; });
+  const target = Math.round((s.fte||0)*(SETTINGS.hoursPerFte||80));
+  return {total, target, variance: total-target};
+}
+function coverageFor(p){
+  const shifts = ['8A-4P','4P-12A','12A-8A'];
+  const out = {};
+  shifts.forEach(sh=>{ out[sh]=p.days.map(d=>STAFF.filter(s=>shiftFor(p,s.id,d)===sh).length); });
+  return out;
+}
+function covClass(n){
+  const min=SETTINGS.minPerShift||2, tgt=SETTINGS.targetPerShift||4;
+  if(n<min) return 'cov-red';
+  if(n<tgt) return 'cov-yellow';
+  return 'cov-green';
+}
+function fmtDate(d){
+  const dt = new Date(d+'T00:00:00');
+  return dt.toLocaleDateString('en-US',{weekday:'short',month:'numeric',day:'numeric'});
+}
+
+// ══════════════════════════════════════════════════════════
+// VIEW: DASHBOARD
+// ══════════════════════════════════════════════════════════
+function viewDashboard(){
+  const p = period(ACTIVE_PERIOD);
+  const active = STAFF.filter(s=>s.status==='Active').length;
+  const onboarding = STAFF.filter(s=>s.status==='Onboarding'||s.status==='Pending Acceptance').length;
+  const totalFte = STAFF.filter(s=>s.role!=='manager').reduce((a,s)=>a+(s.fte||0),0);
+  const pendingReqs = REQUESTS.filter(r=>r.status==='pending_lead'||r.status==='pending_manager').length;
+  const myReqs = REQUESTS.filter(r=>r.staffId===CURRENT.id && (r.status==='pending_lead'||r.status==='pending_manager')).length;
+  const today = new Date().toISOString().slice(0,10);
+  const inPeriod = p && today>=p.start && today<=p.end;
+  const todayCov = p && inPeriod ? {
+    '8A-4P': STAFF.filter(s=>shiftFor(p,s.id,today)==='8A-4P').length,
+    '4P-12A': STAFF.filter(s=>shiftFor(p,s.id,today)==='4P-12A').length,
+    '12A-8A': STAFF.filter(s=>shiftFor(p,s.id,today)==='12A-8A').length,
+  } : null;
+  return `
+  <div class="page-hd">
+    <div><div class="eyebrow">Overview</div><h1>Welcome back, ${esc(CURRENT.fn)}</h1>
+    <div class="lede">${SETTINGS.orgName||'Thrive Crisis Center'} — biweekly staffing at a glance.</div></div>
+  </div>
+  <div class="g4" style="margin-bottom:20px">
+    <div class="metric"><div class="mlbl">Active Staff</div><div class="mval">${active}</div></div>
+    <div class="metric"><div class="mlbl">Onboarding / Pending</div><div class="mval">${onboarding}</div></div>
+    <div class="metric"><div class="mlbl">Total FTE (hourly staff)</div><div class="mval">${totalFte.toFixed(1)} <span style="font-size:14px;color:var(--muted)">/ ${SETTINGS.fteBudget||18}</span></div></div>
+    <div class="metric"><div class="mlbl">${isManager()?'Pending Approvals':'My Open Requests'}</div><div class="mval">${isManager()?pendingReqs:myReqs}</div></div>
+  </div>
+  <div class="g2">
+    <div class="card">
+      <h3 style="margin-bottom:12px">Today's Coverage${inPeriod?'':' (no active pay period for today)'}</h3>
+      ${todayCov ? `
+      <table class="tbl"><thead><tr><th>Shift</th><th>Staff On</th><th>Status</th></tr></thead><tbody>
+      ${['8A-4P','4P-12A','12A-8A'].map(sh=>{
+        const n=todayCov[sh]; const cls=covClass(n);
+        return `<tr><td>${sh}</td><td class="mono">${n}</td><td><span class="bdg ${cls==='cov-red'?'ared':cls==='cov-yellow'?'awarn':'agood'}" style="display:inline">${cls==='cov-red'?'Below minimum':cls==='cov-yellow'?'Acceptable':'At target'}</span></td></tr>`;
+      }).join('')}
+      </tbody></table>` : `<div class="lede">No pay period covers today's date yet — check the Schedule tab.</div>`}
+    </div>
+    <div class="card">
+      <h3 style="margin-bottom:12px">FTE Budget</h3>
+      <div style="margin:10px 0 4px;background:#f1ead9;border-radius:6px;height:14px;overflow:hidden">
+        <div style="height:100%;width:${Math.min(100,(totalFte/(SETTINGS.fteBudget||18))*100)}%;background:${totalFte>(SETTINGS.fteBudget||18)?'var(--bad)':'var(--thrive-blue)'}"></div>
+      </div>
+      <div class="lede">${totalFte.toFixed(1)} FTE entered against an ${SETTINGS.fteBudget||18} FTE budget (excludes the Manager role).</div>
+    </div>
+  </div>`;
+}
+
+// ══════════════════════════════════════════════════════════
+// VIEW: ROSTER
+// ══════════════════════════════════════════════════════════
+function viewRoster(){
+  const rows = visibleStaffFor().sort((a,b)=>a.name.localeCompare(b.name));
+  return `
+  <div class="page-hd">
+    <div><div class="eyebrow">People</div><h1>Staff Roster</h1><div class="lede">${rows.length} people${canEditRoster()?' · click a row to edit':''}</div></div>
+    ${canEditRoster()?`<button class="btn-t" onclick="openStaffModal()">+ Add Staff</button>`:''}
+  </div>
+  <div class="card" style="padding:0">
+    <div class="tbl-wrap"><table class="tbl">
+      <thead><tr><th>Name</th><th>Role</th><th>Shift</th><th>FTE</th><th>Weekly Target</th><th>Status</th><th>Supervisor</th><th>Hire Date</th>${canEditRoster()?'<th></th>':''}</tr></thead>
+      <tbody>
+      ${rows.map(s=>`
+        <tr${canEditRoster()?` style="cursor:pointer" onclick="openStaffModal(${s.id})"`:''}>
+          <td><strong>${esc(s.name)}</strong><div style="font-size:11px;color:var(--muted)">${esc(s.email)}</div></td>
+          <td>${roleBadge(s)}</td>
+          <td class="mono">${esc(s.shift)}</td>
+          <td class="mono">${s.fte!=null?s.fte:'—'}</td>
+          <td class="mono">${s.weeklyTargetHours!=null?s.weeklyTargetHours:'—'}</td>
+          <td><span class="bdg" style="background:var(--${STATUS_COLOR[s.status]||'muted'}-soft,#eee);color:var(--${STATUS_COLOR[s.status]||'ink-soft'})">${esc(s.status)}</span></td>
+          <td>${s.supervisorId?esc(nameOf(s.supervisorId)):'—'}</td>
+          <td class="mono">${esc(s.dateOfHire||'—')}</td>
+          ${canEditRoster()?`<td onclick="event.stopPropagation()"><button class="btn-r" onclick="removeStaff(${s.id})">Remove</button></td>`:''}
+        </tr>`).join('')}
+      </tbody>
+    </table></div>
+  </div>`;
+}
+function roleBadge(s){
+  if(s.role==='manager') return `<span class="bdg" style="background:var(--accent-soft);color:#7a5b00">Manager</span>`;
+  if(s.role==='team_lead') return `<span class="bdg" style="background:#f4dae8;color:#8c2d5a">Team Lead</span>`;
+  return `<span class="bdg" style="background:#eee9dc;color:var(--ink-soft)">Staff</span>`;
+}
+function openStaffModal(id){
+  const s = id?byId(id):null;
+  const body = document.createElement('div');
+  body.className='mbg';
+  body.innerHTML = `
+  <div class="mbox"><div class="mbdy">
+    <h3>${s?'Edit Staff':'Add Staff'}</h3>
+    <div class="g2">
+      <div class="fld"><label class="lbl">First Name</label><input class="inp" id="f_fn" value="${s?esc(s.fn):''}"></div>
+      <div class="fld"><label class="lbl">Last Name</label><input class="inp" id="f_ln" value="${s?esc(s.ln):''}"></div>
+    </div>
+    <div class="fld"><label class="lbl">Email</label><input class="inp" id="f_email" value="${s?esc(s.email):''}"></div>
+    <div class="g2">
+      <div class="fld"><label class="lbl">Shift</label>
+        <select class="inp" id="f_shift">
+          ${['8A-4P','4P-12A','12A-8A','7A-3P','Varies (see note)'].map(o=>`<option ${s&&s.shift===o?'selected':''}>${o}</option>`).join('')}
+        </select>
+      </div>
+      <div class="fld"><label class="lbl">Role</label>
+        <select class="inp" id="f_role">
+          <option value="staff" ${s&&s.role==='staff'?'selected':''}>Staff</option>
+          <option value="team_lead" ${s&&s.role==='team_lead'?'selected':''}>Team Lead</option>
+          <option value="manager" ${s&&s.role==='manager'?'selected':''}>Manager</option>
+        </select>
+      </div>
+    </div>
+    <div class="g2">
+      <div class="fld"><label class="lbl">FTE</label><input class="inp" id="f_fte" type="number" step="0.1" value="${s&&s.fte!=null?s.fte:1}"></div>
+      <div class="fld"><label class="lbl">Status</label>
+        <select class="inp" id="f_status">
+          ${['Active','Onboarding','Pending Acceptance','Inactive'].map(o=>`<option ${s&&s.status===o?'selected':''}>${o}</option>`).join('')}
+        </select>
+      </div>
+    </div>
+    <div class="fld"><label class="lbl">Supervisor</label>
+      <select class="inp" id="f_sup">
+        <option value="">— None (top of tree) —</option>
+        ${STAFF.filter(x=>!s||x.id!==s.id).map(x=>`<option value="${x.id}" ${s&&s.supervisorId===x.id?'selected':''}>${esc(x.name)}</option>`).join('')}
+      </select>
+    </div>
+    <div class="fld"><label class="lbl">Date of Hire</label><input class="inp" id="f_hire" value="${s?esc(s.dateOfHire||''):''}" placeholder="YYYY-MM-DD or LAUNCH"></div>
+    <div class="fld"><label class="lbl">Notes</label><textarea class="inp" id="f_notes">${s?esc(s.notes||''):''}</textarea></div>
+    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:18px">
+      <button class="btn-g" onclick="closeModal()">Cancel</button>
+      <button class="btn-n" onclick="saveStaffModal(${s?s.id:'null'})">Save</button>
+    </div>
+  </div></div>`;
+  document.body.appendChild(body);
+}
+function closeModal(){ document.querySelectorAll('.mbg').forEach(e=>e.remove()); }
+async function saveStaffModal(id){
+  const fn=document.getElementById('f_fn').value.trim();
+  const ln=document.getElementById('f_ln').value.trim();
+  if(!fn||!ln){ toast('First and last name are required.',true); return; }
+  const rec = {
+    id: id || (Math.max(0,...STAFF.map(s=>s.id))+1),
+    fn, ln, name: fn+' '+ln,
+    email: document.getElementById('f_email').value.trim(),
+    shift: document.getElementById('f_shift').value,
+    role: document.getElementById('f_role').value,
+    fte: parseFloat(document.getElementById('f_fte').value)||0,
+    weeklyTargetHours: Math.round((parseFloat(document.getElementById('f_fte').value)||0)*(SETTINGS.hoursPerFte||80)),
+    status: document.getElementById('f_status').value,
+    teamLead: document.getElementById('f_role').value==='team_lead',
+    supervisorId: document.getElementById('f_sup').value ? parseInt(document.getElementById('f_sup').value,10) : null,
+    dateOfHire: document.getElementById('f_hire').value.trim(),
+    notes: document.getElementById('f_notes').value.trim(),
+    passcode: id ? (byId(id).passcode) : genPasscode(),
+  };
+  const idx = STAFF.findIndex(s=>s.id===rec.id);
+  if(idx>=0) STAFF[idx]=rec; else STAFF.push(rec);
+  saveStaff();
+  closeModal();
+  toast(id?'Staff member updated.':'Staff member added.');
+  renderView();
+}
+async function removeStaff(id){
+  if(!confirm('Remove this person from the roster?')) return;
+  STAFF = STAFF.filter(s=>s.id!==id);
+  saveStaff();
+  toast('Removed from roster.');
+  renderView();
+}
+function genPasscode(){
+  const used = new Set(STAFF.map(s=>s.passcode));
+  let c;
+  do{ c = String(Math.floor(Math.random()*10000)).padStart(4,'0'); }while(used.has(c));
+  return c;
+}
+
+// ══════════════════════════════════════════════════════════
+// VIEW: SCHEDULE
+// ══════════════════════════════════════════════════════════
+function viewSchedule(){
+  const p = period(ACTIVE_PERIOD);
+  if(!p) return `<div class="page-hd"><h1>Schedule</h1></div><div class="awarn">No pay periods found.</div>`;
+  const rows = visibleStaffFor().sort((a,b)=>a.name.localeCompare(b.name));
+  const cov = coverageFor(p);
+  const editable = canEditSchedule();
+  const dirty = Object.keys(PENDING_SCHED_EDITS).length>0;
+  return `
+  <div class="page-hd">
+    <div><div class="eyebrow">Biweekly</div><h1>Schedule</h1><div class="lede">${esc(p.label)}${editable?' · edit shifts below, then Save changes':''}</div></div>
+    <div style="display:flex;gap:8px;align-items:center">
+      <select class="inp" style="width:auto" onchange="changePeriod(this.value)">
+        ${SCHEDULE.periods.map(pp=>`<option value="${pp.id}" ${pp.id===p.id?'selected':''}>${esc(pp.label)}</option>`).join('')}
+      </select>
+      ${editable?`<button class="btn-n" ${dirty?'':'disabled'} onclick="saveScheduleEdits()">Save changes</button>`:''}
+    </div>
+  </div>
+  <div class="card" style="margin-bottom:20px">
+    <h3 style="margin-bottom:10px">Coverage Summary</h3>
+    <div class="lede" style="margin-bottom:10px">Minimum ${SETTINGS.minPerShift||2} · Target ${SETTINGS.targetPerShift||4} staff per shift. <span class="delta good">green</span> meets target, <span class="delta bad" style="background:var(--warn-soft);color:var(--warn)">yellow</span> acceptable, <span class="delta bad">red</span> below minimum.</div>
+    <div class="tbl-wrap"><table class="sched-tbl">
+      <thead><tr><th class="name-cell">Shift</th>${p.days.map(d=>`<th>${fmtDate(d)}</th>`).join('')}</tr></thead>
+      <tbody>
+      ${['8A-4P','4P-12A','12A-8A'].map(sh=>`
+        <tr><td class="name-cell">${sh}</td>${cov[sh].map(n=>`<td class="cov-cell ${covClass(n)}">${n}</td>`).join('')}</tr>
+      `).join('')}
+      </tbody>
+    </table></div>
+  </div>
+  <div class="card" style="padding:0">
+    <div class="tbl-wrap"><table class="sched-tbl">
+      <thead><tr>
+        <th class="name-cell">Staff</th>
+        ${p.days.map(d=>`<th>${fmtDate(d)}</th>`).join('')}
+        <th>Total</th><th>Target</th><th>Var.</th>
+      </tr></thead>
+      <tbody>
+      ${rows.map(s=>{
+        const t = totalsFor(p,s);
+        return `<tr>
+          <td class="name-cell">${esc(s.name)}</td>
+          ${p.days.map(d=>{
+            const val = shiftFor(p,s.id,d);
+            const cls = SHIFT_CLASS[val]||'shift-blank';
+            if(!editable){ return `<td class="${cls}">${esc(val)}</td>`; }
+            return `<td class="${cls}" style="padding:0">
+              <select class="shift-sel" onchange="editShift(${s.id},'${d}',this.value)">
+                ${SHIFT_OPTIONS.map(o=>`<option value="${o}" ${o===val?'selected':''}>${o||'—'}</option>`).join('')}
+              </select>
+            </td>`;
+          }).join('')}
+          <td class="mono">${t.total==null?'N/A':t.total}</td>
+          <td class="mono">${t.target==null?'N/A':t.target}</td>
+          <td class="mono">${t.variance==null?'N/A':(t.variance>0?'+':'')+t.variance}</td>
+        </tr>`;
+      }).join('')}
+      </tbody>
+    </table></div>
+  </div>`;
+}
+function changePeriod(id){ ACTIVE_PERIOD=id; PENDING_SCHED_EDITS={}; renderView(); }
+function editShift(staffId,date,val){
+  PENDING_SCHED_EDITS[staffId] = PENDING_SCHED_EDITS[staffId]||{};
+  PENDING_SCHED_EDITS[staffId][date] = val;
+  const p = period(ACTIVE_PERIOD);
+  const t = totalsFor(p, byId(staffId));
+  // live-update just the totals cells without a full re-render, but full render is simplest/safest
+  renderView();
+}
+async function saveScheduleEdits(){
+  const p = period(ACTIVE_PERIOD);
+  Object.entries(PENDING_SCHED_EDITS).forEach(([sid,edits])=>{
+    p.entries[sid] = p.entries[sid]||{};
+    Object.entries(edits).forEach(([d,v])=>{ p.entries[sid][d]=v; });
+  });
+  PENDING_SCHED_EDITS = {};
+  saveSchedule();
+  toast('Schedule saved.');
+  renderView();
+}
+
+// ══════════════════════════════════════════════════════════
+// VIEW: SHIFT REQUESTS
+// ══════════════════════════════════════════════════════════
+const REQUEST_TYPES = ['Shift change','Time off (PTO)','Sick time','Schedule swap','Other'];
+function viewRequests(){
+  const mine = REQUESTS.filter(r=>r.staffId===CURRENT.id);
+  const toApprove = isManager()
+    ? REQUESTS.filter(r=>r.status==='pending_manager')
+    : isTeamLead()
+      ? REQUESTS.filter(r=>r.status==='pending_lead' && isSupervisorOf(CURRENT.id,r.staffId))
+      : [];
+  const all = isManager() ? REQUESTS.slice().sort((a,b)=>b.createdAt.localeCompare(a.createdAt)) : null;
+  return `
+  <div class="page-hd">
+    <div><div class="eyebrow">Workflow</div><h1>Shift Requests</h1><div class="lede">Submit a request; it routes to your team lead (if you have one), then to the manager.</div></div>
+    <button class="btn-t" onclick="openRequestModal()">+ New Request</button>
+  </div>
+  ${toApprove.length?`
+  <div class="card" style="margin-bottom:20px">
+    <h3 style="margin-bottom:10px">Awaiting Your Approval (${toApprove.length})</h3>
+    ${requestTable(toApprove, true)}
+  </div>`:''}
+  <div class="card" style="margin-bottom:20px">
+    <h3 style="margin-bottom:10px">My Requests</h3>
+    ${mine.length?requestTable(mine.sort((a,b)=>b.createdAt.localeCompare(a.createdAt)), false):'<div class="lede">No requests submitted yet.</div>'}
+  </div>
+  ${all?`<div class="card"><h3 style="margin-bottom:10px">All Requests (Manager)</h3>${all.length?requestTable(all,false):'<div class="lede">None yet.</div>'}</div>`:''}
+  `;
+}
+function statusBadge(st){
+  const map = {
+    pending_lead:['awarn','Pending Team Lead'], pending_manager:['awarn','Pending Manager'],
+    approved:['agood','Approved'], denied:['ared','Denied'],
+  };
+  const [cls,label] = map[st]||['awarn',st];
+  return `<span class="${cls}" style="display:inline-block;padding:3px 10px;font-size:11px">${label}</span>`;
+}
+function requestTable(list, actionable){
+  return `<div class="tbl-wrap"><table class="tbl">
+    <thead><tr><th>Staff</th><th>Type</th><th>Date(s)</th><th>Reason</th><th>Status</th>${actionable?'<th></th>':''}${isManager()&&!actionable?'<th></th>':''}</tr></thead>
+    <tbody>
+    ${list.map(r=>`
+      <tr>
+        <td>${esc(nameOf(r.staffId))}</td>
+        <td>${esc(r.type)}</td>
+        <td class="mono">${esc(r.dates)}</td>
+        <td>${esc(r.reason)}</td>
+        <td>${statusBadge(r.status)}</td>
+        ${actionable?`<td style="display:flex;gap:6px"><button class="btn-ok" onclick="decideRequest('${r.id}',true)">Approve</button><button class="btn-r" onclick="decideRequest('${r.id}',false)">Deny</button></td>`:''}
+        ${isManager()&&!actionable?`<td>${r.status==='approved'&&r.newShift&&!r.appliedToRoster?`<button class="btn-g" onclick="applyToRoster('${r.id}')">Apply to roster</button>`:(r.appliedToRoster?'<span class="mono" style="font-size:11px;color:var(--good)">Applied ✓</span>':'')}</td>`:''}
+      </tr>`).join('')}
+    </tbody>
+  </table></div>`;
+}
+function openRequestModal(){
+  const s = CURRENT;
+  const body = document.createElement('div');
+  body.className='mbg';
+  body.innerHTML = `
+  <div class="mbox"><div class="mbdy">
+    <h3>New Shift Request</h3>
+    <div class="g2">
+      <div class="fld"><label class="lbl">Name</label><input class="inp" value="${esc(s.name)}" disabled></div>
+      <div class="fld"><label class="lbl">Current Shift</label><input class="inp" value="${esc(s.shift)}" disabled></div>
+    </div>
+    <div class="g2">
+      <div class="fld"><label class="lbl">Date of Hire</label><input class="inp" value="${esc(s.dateOfHire||'—')}" disabled></div>
+      <div class="fld"><label class="lbl">Current Status</label><input class="inp" value="${esc(s.status)}" disabled></div>
+    </div>
+    <div class="fld"><label class="lbl">Request Type</label>
+      <select class="inp" id="r_type" onchange="document.getElementById('r_newshift_fld').style.display=(this.value==='Shift change'||this.value==='Schedule swap')?'block':'none'">${REQUEST_TYPES.map(t=>`<option>${t}</option>`).join('')}</select>
+    </div>
+    <div class="fld" id="r_newshift_fld" style="display:none">
+      <label class="lbl">Requested New Shift</label>
+      <select class="inp" id="r_newshift">
+        <option value="">— select —</option>
+        ${['8A-4P','4P-12A','12A-8A','7A-3P'].map(o=>`<option>${o}</option>`).join('')}
+      </select>
+    </div>
+    <div class="fld"><label class="lbl">Date(s)</label><input class="inp" id="r_dates" placeholder="e.g. 9/22/26 or 9/22–9/24/26"></div>
+    <div class="fld"><label class="lbl">Reason / Details</label><textarea class="inp" id="r_reason"></textarea></div>
+    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:18px">
+      <button class="btn-g" onclick="closeModal()">Cancel</button>
+      <button class="btn-n" onclick="submitRequest()">Submit</button>
+    </div>
+  </div></div>`;
+  document.body.appendChild(body);
+}
+async function submitRequest(){
+  const type = document.getElementById('r_type').value;
+  const dates = document.getElementById('r_dates').value.trim();
+  const reason = document.getElementById('r_reason').value.trim();
+  const newShift = document.getElementById('r_newshift').value;
+  if(!dates){ toast('Please enter a date.',true); return; }
+  const s = CURRENT;
+  const hasLead = s.supervisorId && byId(s.supervisorId) && byId(s.supervisorId).role==='team_lead';
+  const rec = {
+    id: 'req_'+Date.now(), staffId: s.id, type, dates, reason, newShift: newShift||null,
+    currentShift: s.shift, currentStatus: s.status, dateOfHire: s.dateOfHire,
+    status: hasLead ? 'pending_lead' : 'pending_manager',
+    leadDecision: null, managerDecision: null,
+    createdAt: new Date().toISOString(), appliedToRoster: false,
+  };
+  REQUESTS.push(rec);
+  saveRequests();
+  closeModal();
+  toast('Request submitted.');
+  renderView();
+}
+async function decideRequest(id, approve){
+  const r = REQUESTS.find(x=>x.id===id);
+  if(!r) return;
+  if(r.status==='pending_lead'){
+    r.leadDecision = approve?'approved':'denied';
+    r.status = approve ? 'pending_manager' : 'denied';
+  } else if(r.status==='pending_manager'){
+    r.managerDecision = approve?'approved':'denied';
+    r.status = approve?'approved':'denied';
+  }
+  saveRequests();
+  toast(approve?'Approved.':'Denied.');
+  renderView();
+}
+async function applyToRoster(id){
+  const r = REQUESTS.find(x=>x.id===id);
+  if(!r || r.appliedToRoster) return;
+  const s = byId(r.staffId);
+  if(s && r.newShift){
+    s.shift = r.newShift;
+    s.weeklyTargetHours = Math.round((s.fte||0)*(SETTINGS.hoursPerFte||80));
+  }
+  r.appliedToRoster = true;
+  saveRequests();
+  if(s && r.newShift) saveStaff();
+  toast('Applied to roster.');
+  renderView();
+}
+
+// ══════════════════════════════════════════════════════════
+// VIEW: SUPERVISION LOG
+// ══════════════════════════════════════════════════════════
+function viewSupervision(){
+  const canLog = isManager()||isTeamLead();
+  const visible = isManager() ? SUPERVISION
+    : isTeamLead() ? SUPERVISION.filter(l=>l.staffId===CURRENT.id||isSupervisorOf(CURRENT.id,l.staffId))
+    : SUPERVISION.filter(l=>l.staffId===CURRENT.id);
+  return `
+  <div class="page-hd">
+    <div><div class="eyebrow">1:1s</div><h1>Supervision Log</h1><div class="lede">${canLog?'Log a supervision session with a direct report.':'Your supervision session history.'}</div></div>
+    ${canLog?`<button class="btn-t" onclick="openSupModal()">+ Log Session</button>`:''}
+  </div>
+  <div class="card" style="padding:0">
+    <div class="tbl-wrap"><table class="tbl">
+      <thead><tr><th>Staff</th><th>Date</th><th>Logged By</th><th>Topics</th><th>Action Items</th><th>Follow-up</th></tr></thead>
+      <tbody>
+      ${visible.length?visible.sort((a,b)=>b.date.localeCompare(a.date)).map(l=>`
+        <tr>
+          <td>${esc(nameOf(l.staffId))}</td>
+          <td class="mono">${esc(l.date)}</td>
+          <td>${esc(nameOf(l.loggedBy))}</td>
+          <td>${esc(l.topics)}</td>
+          <td>${esc(l.actionItems)}</td>
+          <td class="mono">${esc(l.followUpDate||'—')}</td>
+        </tr>`).join(''):`<tr><td colspan="6" style="text-align:center;color:var(--muted);padding:20px">No sessions logged yet.</td></tr>`}
+      </tbody>
+    </table></div>
+  </div>`;
+}
+function openSupModal(){
+  const reports = isManager() ? STAFF.filter(s=>s.id!==CURRENT.id) : STAFF.filter(s=>s.supervisorId===CURRENT.id);
+  const body = document.createElement('div');
+  body.className='mbg';
+  body.innerHTML = `
+  <div class="mbox"><div class="mbdy">
+    <h3>Log Supervision Session</h3>
+    <div class="fld"><label class="lbl">Staff Member</label>
+      <select class="inp" id="s_staff">${reports.map(s=>`<option value="${s.id}">${esc(s.name)}</option>`).join('')}</select>
+    </div>
+    <div class="fld"><label class="lbl">Date</label><input class="inp" id="s_date" type="date" value="${new Date().toISOString().slice(0,10)}"></div>
+    <div class="fld"><label class="lbl">Topics Discussed</label><textarea class="inp" id="s_topics"></textarea></div>
+    <div class="fld"><label class="lbl">Action Items</label><textarea class="inp" id="s_action"></textarea></div>
+    <div class="fld"><label class="lbl">Follow-up Date</label><input class="inp" id="s_followup" type="date"></div>
+    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:18px">
+      <button class="btn-g" onclick="closeModal()">Cancel</button>
+      <button class="btn-n" onclick="saveSupSession()">Save</button>
+    </div>
+  </div></div>`;
+  document.body.appendChild(body);
+}
+async function saveSupSession(){
+  const staffId = parseInt(document.getElementById('s_staff').value,10);
+  const rec = {
+    id: 'sup_'+Date.now(), staffId, loggedBy: CURRENT.id,
+    date: document.getElementById('s_date').value,
+    topics: document.getElementById('s_topics').value.trim(),
+    actionItems: document.getElementById('s_action').value.trim(),
+    followUpDate: document.getElementById('s_followup').value,
+  };
+  SUPERVISION.push(rec);
+  saveSupervision();
+  closeModal();
+  toast('Session logged.');
+  renderView();
+}
+
+// ══════════════════════════════════════════════════════════
+// VIEW: SUPERVISION TREE
+// ══════════════════════════════════════════════════════════
+function viewTree(){
+  const root = STAFF.find(s=>s.role==='manager');
+  return `
+  <div class="page-hd"><div><div class="eyebrow">Org Chart</div><h1>Supervision Tree</h1><div class="lede">Generated live from each person's supervisor on the Roster.</div></div></div>
+  <div class="card"><div class="tree">${root?treeNode(root):'<div class="lede">No manager on the roster.</div>'}</div></div>`;
+}
+function treeNode(s){
+  const kids = STAFF.filter(x=>x.supervisorId===s.id);
+  const cls = s.role==='manager'?'mgr':(s.role==='team_lead'?'lead':'');
+  return `<div class="tree-node ${cls}">
+    <div class="tree-name">${esc(s.name)}</div>
+    <div class="tree-role">${roleLabel(s)}</div>
+  </div>
+  ${kids.length?`<div class="tree-children">${kids.sort((a,b)=>a.name.localeCompare(b.name)).map(treeNode).join('')}</div>`:''}`;
+}
+
+// ══════════════════════════════════════════════════════════
+// VIEW: UKG
+// ══════════════════════════════════════════════════════════
+function viewUkg(){
+  return `
+  <div class="page-hd"><div><div class="eyebrow">Payroll & Timekeeping</div><h1>UKG</h1></div></div>
+  <div class="card" style="max-width:480px;text-align:center;padding:40px 30px">
+    <div style="font-size:15px;color:var(--ink-soft);margin-bottom:18px">${SETTINGS.ukgUrl?'Open the UKG portal in a new tab.':'No UKG portal URL has been set yet.'}</div>
+    ${SETTINGS.ukgUrl
+      ? `<a class="btn-n" style="display:inline-block;text-decoration:none" href="${esc(SETTINGS.ukgUrl)}" target="_blank" rel="noopener">Open UKG →</a>`
+      : (isManager()?`<button class="btn-g" onclick="nav('settings')">Set URL in Settings</button>`:`<div class="lede">Ask David to set this up in Settings.</div>`)}
+  </div>`;
+}
+
+// ══════════════════════════════════════════════════════════
+// VIEW: SETTINGS (manager only)
+// ══════════════════════════════════════════════════════════
+function viewSettings(){
+  if(!canSeeSettings()) return `<div class="ared">You don't have access to Settings.</div>`;
+  return `
+  <div class="page-hd"><div><div class="eyebrow">Manager Only</div><h1>Settings</h1></div></div>
+  <div class="g2" style="align-items:start">
+    <div class="card">
+      <h3 style="margin-bottom:14px">Organization</h3>
+      <div class="fld"><label class="lbl">Org Name</label><input class="inp" id="set_org" value="${esc(SETTINGS.orgName||'')}"></div>
+      <div class="fld"><label class="lbl">UKG Portal URL</label><input class="inp" id="set_ukg" value="${esc(SETTINGS.ukgUrl||'')}" placeholder="https://..."></div>
+      <div class="g2">
+        <div class="fld"><label class="lbl">FTE Budget</label><input class="inp" id="set_fte" type="number" value="${SETTINGS.fteBudget||18}"></div>
+        <div class="fld"><label class="lbl">Hours / FTE per period</label><input class="inp" id="set_hpf" type="number" value="${SETTINGS.hoursPerFte||80}"></div>
+      </div>
+      <div class="g2">
+        <div class="fld"><label class="lbl">Min Staff / Shift</label><input class="inp" id="set_min" type="number" value="${SETTINGS.minPerShift||2}"></div>
+        <div class="fld"><label class="lbl">Target Staff / Shift</label><input class="inp" id="set_tgt" type="number" value="${SETTINGS.targetPerShift||4}"></div>
+      </div>
+      <button class="btn-n" onclick="saveOrgSettings()">Save Settings</button>
+    </div>
+    <div class="card">
+      <h3 style="margin-bottom:14px">Passcodes</h3>
+      <div class="lede" style="margin-bottom:10px">Each person signs in with their name and this code.</div>
+      <div class="tbl-wrap"><table class="tbl">
+        <thead><tr><th>Name</th><th>Role</th><th>Passcode</th></tr></thead>
+        <tbody>
+        ${STAFF.slice().sort((a,b)=>a.name.localeCompare(b.name)).map(s=>`
+          <tr>
+            <td>${esc(s.name)}</td>
+            <td>${roleBadge(s)}</td>
+            <td><input class="inp mono" style="width:90px" maxlength="4" value="${esc(s.passcode)}" onchange="updatePasscode(${s.id},this.value)"></td>
+          </tr>`).join('')}
+        </tbody>
+      </table></div>
+      <button class="btn-g" style="margin-top:12px" onclick="regenAllPasscodes()">Generate new codes for everyone</button>
+    </div>
+  </div>`;
+}
+async function saveOrgSettings(){
+  SETTINGS.orgName = document.getElementById('set_org').value.trim();
+  SETTINGS.ukgUrl = document.getElementById('set_ukg').value.trim();
+  SETTINGS.fteBudget = parseFloat(document.getElementById('set_fte').value)||18;
+  SETTINGS.hoursPerFte = parseFloat(document.getElementById('set_hpf').value)||80;
+  SETTINGS.minPerShift = parseInt(document.getElementById('set_min').value,10)||2;
+  SETTINGS.targetPerShift = parseInt(document.getElementById('set_tgt').value,10)||4;
+  saveSettings();
+  toast('Settings saved.');
+  renderView();
+}
+async function updatePasscode(id, val){
+  const s = byId(id);
+  const code = (val||'').trim();
+  if(!/^\d{4}$/.test(code)){ toast('Passcode must be 4 digits.',true); renderView(); return; }
+  s.passcode = code;
+  saveStaff();
+  toast('Passcode updated for '+s.name+'.');
+}
+async function regenAllPasscodes(){
+  if(!confirm('Generate a new random passcode for every person? Old codes will stop working immediately.')) return;
+  const used = new Set();
+  STAFF.forEach(s=>{
+    let c; do{ c=String(Math.floor(Math.random()*10000)).padStart(4,'0'); }while(used.has(c));
+    used.add(c); s.passcode=c;
+  });
+  saveStaff();
+  toast('New passcodes generated for everyone.');
+  renderView();
+}
+
+// ══════════════════════════════════════════════════════════
+// BOOT
+// ══════════════════════════════════════════════════════════
+async function boot(){
+  renderLoading();
+  await loadAll();
+  renderLogin();
+}
+boot();
+</script>
+</body>
+</html>
