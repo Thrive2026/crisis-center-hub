@@ -516,7 +516,7 @@ function viewRoster(){
           <td><span class="bdg" style="background:var(--${STATUS_COLOR[s.status]||'muted'}-soft,#eee);color:var(--${STATUS_COLOR[s.status]||'ink-soft'})">${esc(s.status)}</span></td>
           <td>${s.supervisorId?esc(nameOf(s.supervisorId)):'—'}</td>
           <td class="mono">${esc(s.dateOfHire||'—')}</td>
-          ${canEditRoster()?`<td onclick="event.stopPropagation()"><button class="btn-r" onclick="removeStaff(${s.id})">Remove</button></td>`:''}
+          ${canEditRoster()?`<td onclick="event.stopPropagation()">${s.status==='Inactive'?`<button class="btn-ok" onclick="reactivateStaff(${s.id})">Reactivate</button>`:`<button class="btn-r" onclick="deactivateStaff(${s.id})">Deactivate</button>`}</td>`:''}
         </tr>`).join('')}
       </tbody>
     </table></div>
@@ -603,11 +603,24 @@ async function saveStaffModal(id){
   toast(id?'Staff member updated.':'Staff member added.');
   renderView();
 }
-async function removeStaff(id){
-  if(!confirm('Remove this person from the roster?')) return;
-  STAFF = STAFF.filter(s=>s.id!==id);
+async function deactivateStaff(id){
+  const s = byId(id);
+  if(!s) return;
+  const reports = STAFF.filter(x=>x.supervisorId===id).length;
+  const warn = reports ? ` ${reports} ${reports===1?'person reports':'people report'} to them directly — they'll keep showing that supervisor, but you can reassign them anytime from this page.` : '';
+  if(!confirm(`Deactivate ${s.name}? They will no longer be able to sign in, and will drop off the Active count.${warn}`)) return;
+  s.status = 'Inactive';
   saveStaff();
-  toast('Removed from roster.');
+  toast(`${s.name} deactivated.`);
+  renderView();
+}
+async function reactivateStaff(id){
+  const s = byId(id);
+  if(!s) return;
+  if(!confirm(`Reactivate ${s.name}? They will be able to sign in again.`)) return;
+  s.status = 'Active';
+  saveStaff();
+  toast(`${s.name} reactivated.`);
   renderView();
 }
 function genPasscode(){
