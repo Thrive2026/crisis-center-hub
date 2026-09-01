@@ -500,6 +500,28 @@ function viewDashboard(){
       </div>
       <div class="lede">${totalFte.toFixed(1)} FTE entered against an ${SETTINGS.fteBudget||18} FTE budget (excludes the Manager role).</div>
     </div>
+  </div>
+  <div class="g2" style="margin-top:16px">
+    ${statusTilesCard('My Requests', REQUESTS.filter(r=>r.staffId===CURRENT.id))}
+    ${isTeamLead()?statusTilesCard("My Crew's Requests", REQUESTS.filter(r=>isSupervisorOf(CURRENT.id,r.staffId))):''}
+    ${isManager()?statusTilesCard('All Requests (Org-wide)', REQUESTS):''}
+  </div>`;
+}
+// Pending/Approved/Denied breakdown for a set of requests — shown on the
+// Dashboard so submitters can see where their own requests stand, team
+// leads can see how their crew's requests are moving, and David can see
+// the whole org at a glance without opening Shift Requests.
+function statusTilesCard(title, list){
+  const pending = list.filter(r=>r.status==='pending_lead'||r.status==='pending_manager').length;
+  const approved = list.filter(r=>r.status==='approved').length;
+  const denied = list.filter(r=>r.status==='denied').length;
+  return `<div class="card">
+    <h3 style="margin-bottom:12px">${esc(title)}</h3>
+    <div class="g3">
+      <div class="metric"><div class="mlbl">Pending</div><div class="mval" style="color:var(--warn)">${pending}</div></div>
+      <div class="metric"><div class="mlbl">Approved</div><div class="mval" style="color:var(--good)">${approved}</div></div>
+      <div class="metric"><div class="mlbl">Denied</div><div class="mval" style="color:var(--bad)">${denied}</div></div>
+    </div>
   </div>`;
 }
 
@@ -525,13 +547,25 @@ function viewRoster(){
           <td class="mono">${s.fte!=null?s.fte:'—'}</td>
           <td class="mono">${s.weeklyTargetHours!=null?s.weeklyTargetHours:'—'}</td>
           <td><span class="bdg" style="background:var(--${STATUS_COLOR[s.status]||'muted'}-soft,#eee);color:var(--${STATUS_COLOR[s.status]||'ink-soft'})">${esc(s.status)}</span></td>
-          <td>${s.supervisorId?esc(nameOf(s.supervisorId)):'—'}</td>
+          <td>${supervisorCellHtml(s)}</td>
           <td class="mono">${esc(s.dateOfHire||'—')}</td>
           ${canEditRoster()?`<td onclick="event.stopPropagation()">${s.status==='Inactive'?`<button class="btn-ok" onclick="reactivateStaff(${s.id})">Reactivate</button>`:`<button class="btn-r" onclick="deactivateStaff(${s.id})">Deactivate</button>`}</td>`:''}
         </tr>`).join('')}
       </tbody>
     </table></div>
   </div>`;
+}
+// David is the supervisor of record for everyone, shown on the Roster and
+// the org chart, even though Harold/Rondye still function as day-to-day
+// shift leads and keep pre-approving their own crew's shift requests (that
+// still reads the real supervisorId — this only changes what's displayed).
+function supervisorCellHtml(s){
+  if(s.role==='manager') return '—';
+  const mgr = STAFF.find(x=>x.role==='manager');
+  const actualSup = s.supervisorId!=null ? byId(s.supervisorId) : null;
+  const note = (actualSup && actualSup.role==='team_lead')
+    ? `<div style="font-size:10.5px;color:var(--muted)">Shift lead: ${esc(actualSup.name)}</div>` : '';
+  return `${mgr?esc(mgr.name):'—'}${note}`;
 }
 function roleBadge(s){
   if(s.role==='manager') return `<span class="bdg" style="background:var(--accent-soft);color:#7a5b00">Manager</span>`;
@@ -887,7 +921,8 @@ function openImpactModal(id){
   body.innerHTML = `
   <div class="mbox"><div class="mbdy">
     <h3>Review Request — ${esc(s?s.name:'Unknown')}</h3>
-    <div class="lede" style="margin-bottom:14px">${esc(r.type)} · ${esc(r.dates)}${r.newShift?` → ${esc(r.newShift)}`:''}${r.reason?` — “${esc(r.reason)}”`:''}</div>
+    <div class="lede" style="margin-bottom:2px">${esc(r.type)} · ${esc(r.dates)}${r.newShift?` → ${esc(r.newShift)}`:''}${r.reason?` — “${esc(r.reason)}”`:''}</div>
+    <div class="lede" style="margin-bottom:14px;font-size:11.5px;${((r.status==='pending_lead'||r.status==='pending_manager')&&daysAgo(r.createdAt)>=2)?'color:var(--bad);font-weight:600':''}">Submitted ${fmtShort(r.createdAt.slice(0,10))} (${(()=>{const d=daysAgo(r.createdAt);return d<=0?'today':d===1?'1 day ago':d+' days ago';})()})</div>
     ${impact===null
       ? `<div class="awarn">Staffing impact can’t be auto-checked for this request type — review the Schedule tab manually before deciding.</div>`
       : impactTableHtml(impact)}
@@ -906,11 +941,14 @@ function openImpactModal(id){
 const REQUEST_TYPES = ['Shift change','Time off (PTO)','Sick time','Schedule swap','Other'];
 function viewRequests(){
   const mine = REQUESTS.filter(r=>r.staffId===CURRENT.id);
-  const toApprove = isManager()
+  // Oldest submission first, so a request that's been sitting for days
+  // surfaces at the top of the approval queue instead of getting buried
+  // under newer ones.
+  const toApprove = (isManager()
     ? REQUESTS.filter(r=>r.status==='pending_manager')
     : isTeamLead()
       ? REQUESTS.filter(r=>r.status==='pending_lead' && isSupervisorOf(CURRENT.id,r.staffId))
-      : [];
+      : []).sort((a,b)=>a.createdAt.localeCompare(b.createdAt));
   const all = isManager() ? REQUESTS.slice().sort((a,b)=>b.createdAt.localeCompare(a.createdAt)) : null;
   return `
   <div class="page-hd">
@@ -937,13 +975,25 @@ function statusBadge(st){
   const [cls,label] = map[st]||['awarn',st];
   return `<span class="${cls}" style="display:inline-block;padding:3px 10px;font-size:11px">${label}</span>`;
 }
+// Days between a submission timestamp and now — used to flag requests
+// that have been sitting unanswered for a while so they don't get missed.
+function daysAgo(iso){
+  return Math.floor((Date.now()-new Date(iso).getTime())/86400000);
+}
+function submittedCellHtml(r){
+  const d = daysAgo(r.createdAt);
+  const label = d<=0?'Today':d===1?'1 day ago':`${d} days ago`;
+  const stale = (r.status==='pending_lead'||r.status==='pending_manager') && d>=2;
+  return `<div class="mono">${fmtShort(r.createdAt.slice(0,10))}</div><div style="font-size:10.5px;${stale?'color:var(--bad);font-weight:600':'color:var(--muted)'}">${label}</div>`;
+}
 function requestTable(list, actionable){
   return `<div class="tbl-wrap"><table class="tbl">
-    <thead><tr><th>Staff</th><th>Type</th><th>Date(s)</th><th>Reason</th><th>Status</th>${actionable?'<th></th>':''}${isManager()&&!actionable?'<th></th>':''}</tr></thead>
+    <thead><tr><th>Staff</th><th>Submitted</th><th>Type</th><th>Date(s)</th><th>Reason</th><th>Status</th>${actionable?'<th></th>':''}${isManager()&&!actionable?'<th></th>':''}</tr></thead>
     <tbody>
     ${list.map(r=>`
       <tr>
         <td>${esc(nameOf(r.staffId))}</td>
+        <td>${submittedCellHtml(r)}</td>
         <td>${esc(r.type)}</td>
         <td class="mono">${esc(r.dates)}</td>
         <td>${esc(r.reason)}</td>
@@ -970,16 +1020,16 @@ function openRequestModal(){
       <div class="fld"><label class="lbl">Current Status</label><input class="inp" value="${esc(s.status)}" disabled></div>
     </div>
     <div class="fld"><label class="lbl">Request Type</label>
-      <select class="inp" id="r_type" onchange="document.getElementById('r_newshift_fld').style.display=(this.value==='Shift change'||this.value==='Schedule swap')?'block':'none'">${REQUEST_TYPES.map(t=>`<option>${t}</option>`).join('')}</select>
+      <select class="inp" id="r_type" onchange="onRequestTypeChange(this.value)">${REQUEST_TYPES.map(t=>`<option>${t}</option>`).join('')}</select>
     </div>
-    <div class="fld" id="r_newshift_fld" style="display:none">
+    <div class="fld" id="r_newshift_fld" style="display:${(REQUEST_TYPES[0]==='Shift change'||REQUEST_TYPES[0]==='Schedule swap')?'block':'none'}">
       <label class="lbl">Requested New Shift</label>
       <select class="inp" id="r_newshift">
         <option value="">— select —</option>
         ${['8A-4P','4P-12A','12A-8A','7A-3P'].map(o=>`<option>${o}</option>`).join('')}
       </select>
     </div>
-    <div class="fld">
+    <div class="fld" id="r_datepicker_fld" style="display:${REQUEST_TYPES[0]==='Shift change'?'none':'block'}">
       <label class="lbl">Date(s) — pick every day this request covers</label>
       <div style="max-height:220px;overflow-y:auto;border:1px solid var(--rule);border-radius:3px;padding:10px;background:#faf6ee">${renderDatePicker(s)}</div>
     </div>
@@ -1010,17 +1060,27 @@ function renderDatePicker(s){
       </div>
     </div>`).join('');
 }
+// A plain "Shift change" is a standing change to someone's regular shift
+// going forward, not tied to specific dates — so it skips the date picker
+// entirely and just needs the new shift. Every other type still needs
+// actual date(s) to check staffing impact against.
+function onRequestTypeChange(type){
+  document.getElementById('r_newshift_fld').style.display = (type==='Shift change'||type==='Schedule swap') ? 'block' : 'none';
+  document.getElementById('r_datepicker_fld').style.display = (type==='Shift change') ? 'none' : 'block';
+}
 async function submitRequest(){
   const type = document.getElementById('r_type').value;
   const reason = document.getElementById('r_reason').value.trim();
   const newShift = document.getElementById('r_newshift').value;
-  const dateList = Array.from(document.querySelectorAll('.r_date_cb:checked')).map(cb=>cb.value).sort();
-  if(!dateList.length){ toast('Select at least one date.',true); return; }
+  const needsDates = type!=='Shift change';
+  const dateList = needsDates ? Array.from(document.querySelectorAll('.r_date_cb:checked')).map(cb=>cb.value).sort() : [];
+  if(needsDates && !dateList.length){ toast('Select at least one date.',true); return; }
+  if(type==='Shift change' && !newShift){ toast('Select the desired shift.',true); return; }
   const s = CURRENT;
   const hasLead = s.supervisorId && byId(s.supervisorId) && byId(s.supervisorId).role==='team_lead';
   const rec = {
     id: 'req_'+Date.now(), staffId: s.id, type, reason, newShift: newShift||null,
-    dateList, dates: dateList.map(fmtDate).join(', '),
+    dateList, dates: needsDates ? dateList.map(fmtDate).join(', ') : '— (standing shift change)',
     currentShift: s.shift, currentStatus: s.status, dateOfHire: s.dateOfHire,
     status: hasLead ? 'pending_lead' : 'pending_manager',
     leadDecision: null, managerDecision: null,
@@ -1146,13 +1206,20 @@ async function saveSupSession(){
 function viewTree(){
   const root = STAFF.find(s=>s.role==='manager');
   return `
-  <div class="page-hd"><div><div class="eyebrow">Org Chart</div><h1>Supervision Tree</h1><div class="lede">David at the top, his direct reports beneath him, and each team lead's own team beneath them — generated live from each person's supervisor on the Roster.</div></div></div>
+  <div class="page-hd"><div><div class="eyebrow">Org Chart</div><h1>Supervision Tree</h1><div class="lede">David is supervisor of record for everyone. Harold and Rondye still function as shift leads day-to-day and keep pre-approving requests for their own crew — that's tracked separately and isn't shown here.</div></div></div>
   <div class="card"><div class="orgchart-wrap" id="orgchartWrap">
     ${root ? `<div class="orgchart">${orgBranch(root)}</div><svg class="orgchart-lines" id="orgchartLines"></svg>` : '<div class="lede">No manager on the roster.</div>'}
   </div></div>`;
 }
+// Flattened by design: every active/onboarding staff member reports directly
+// to David for supervision/org-chart purposes, regardless of their actual
+// supervisorId (which still drives shift-request pre-approval routing).
+function recordChildrenOf(s){
+  if(s.role!=='manager') return [];
+  return STAFF.filter(x=>x.id!==s.id).sort((a,b)=>a.name.localeCompare(b.name));
+}
 function orgBranch(s){
-  const kids = STAFF.filter(x=>x.supervisorId===s.id).sort((a,b)=>a.name.localeCompare(b.name));
+  const kids = recordChildrenOf(s);
   const cls = s.role==='manager'?'mgr':(s.role==='team_lead'?'lead':'staff');
   return `<div class="branch">
     <div class="node ${cls}" data-id="${s.id}">
@@ -1178,10 +1245,11 @@ function drawOrgLines(centerRoot){
     return {x,y};
   };
   let paths = '';
+  const mgr = STAFF.find(x=>x.role==='manager');
   STAFF.forEach(s=>{
-    if(s.supervisorId==null) return;
+    if(!mgr || s.id===mgr.id) return;
     const childEl = wrap.querySelector(`.node[data-id="${s.id}"]`);
-    const parentEl = wrap.querySelector(`.node[data-id="${s.supervisorId}"]`);
+    const parentEl = wrap.querySelector(`.node[data-id="${mgr.id}"]`);
     if(!childEl || !parentEl) return;
     const p = pt(parentEl,'bottom');
     const c = pt(childEl,'top');
