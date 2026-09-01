@@ -173,6 +173,17 @@ svg.orgchart-lines{position:absolute;top:0;left:0;pointer-events:none;z-index:1;
 /* ---- role tabs on login ---- */
 .pill-row{display:flex;gap:6px;flex-wrap:wrap;justify-content:center;margin-top:14px}
 .pill-row .p{font-size:11px;padding:4px 10px;border-radius:12px;background:#f1ead9;color:var(--ink-soft);font-weight:600}
+
+/* ---- print (Schedule tab) ---- */
+.print-only{display:none}
+@media print{
+  nav.side, header.topbar, .no-print{display:none !important}
+  body{background:#fff}
+  main{padding:0 !important;max-width:none}
+  .print-only{display:block !important}
+  .card{box-shadow:none;border:1px solid #999}
+  select.shift-sel{border:none;background:transparent !important;-webkit-appearance:none;appearance:none;pointer-events:none;color:#000}
+}
 </style>
 </head>
 <body>
@@ -633,6 +644,27 @@ function genPasscode(){
 // ══════════════════════════════════════════════════════════
 // VIEW: SCHEDULE
 // ══════════════════════════════════════════════════════════
+// True if this staff member has an approved request covering this date
+// that hasn't been applied to the schedule yet — a manual edit here could
+// silently conflict with something already promised to them.
+function approvedPendingApplyFor(staffId,date){
+  return REQUESTS.find(r=>r.staffId===staffId && r.status==='approved' && !r.appliedToRoster && r.dateList && r.dateList.includes(date));
+}
+// Stages (does not save) one person's whole pattern copied from the prior
+// period into the active one, position-matched by day-in-period. Useful
+// after creating a blank period, or when only a couple of people need to
+// be re-synced without touching everyone else's already-edited cells.
+function copyPersonFromPrior(staffId){
+  const idx = SCHEDULE.periods.findIndex(pp=>pp.id===ACTIVE_PERIOD);
+  if(idx<=0){ toast('There is no earlier period to copy from.', true); return; }
+  const p = SCHEDULE.periods[idx], prior = SCHEDULE.periods[idx-1];
+  PENDING_SCHED_EDITS[staffId] = PENDING_SCHED_EDITS[staffId]||{};
+  p.days.forEach((d,i)=>{
+    PENDING_SCHED_EDITS[staffId][d] = (prior.entries[staffId]||{})[prior.days[i]] || '';
+  });
+  toast(nameOf(staffId)+'’s pattern copied from '+prior.label+' — review below, then Save changes.');
+  renderView();
+}
 function viewSchedule(){
   const p = period(ACTIVE_PERIOD);
   if(!p) return `<div class="page-hd"><h1>Schedule</h1></div><div class="awarn">No pay periods found.</div>`;
@@ -640,19 +672,24 @@ function viewSchedule(){
   const cov = coverageFor(p);
   const editable = canEditSchedule();
   const dirty = Object.keys(PENDING_SCHED_EDITS).length>0;
+  const periodIdx = SCHEDULE.periods.findIndex(pp=>pp.id===p.id);
+  const prior = periodIdx>0 ? SCHEDULE.periods[periodIdx-1] : null;
   return `
   <div class="page-hd">
     <div><div class="eyebrow">Biweekly</div><h1>Schedule</h1><div class="lede">${esc(p.label)}${editable?' · edit shifts below, then Save changes':''}</div></div>
-    <div style="display:flex;gap:8px;align-items:center">
+    <div class="no-print" style="display:flex;gap:8px;align-items:center">
       <select class="inp" style="width:auto" onchange="changePeriod(this.value)">
         ${SCHEDULE.periods.map(pp=>`<option value="${pp.id}" ${pp.id===p.id?'selected':''}>${esc(pp.label)}</option>`).join('')}
       </select>
+      ${isManager()?`<button class="btn-g" onclick="openAddPeriodModal()">+ Add Next Period</button>`:''}
+      <button class="btn-g" onclick="window.print()">Print schedule</button>
       ${editable?`<button class="btn-n" ${dirty?'':'disabled'} onclick="saveScheduleEdits()">Save changes</button>`:''}
     </div>
   </div>
+  <div class="print-only" style="font-size:11px;color:#555;margin:-10px 0 16px">${esc(SETTINGS.orgName||'Thrive Crisis Center')} — ${esc(p.label)} — printed ${new Date().toLocaleDateString('en-US')}</div>
   <div class="card" style="margin-bottom:20px">
     <h3 style="margin-bottom:10px">Coverage Summary</h3>
-    <div class="lede" style="margin-bottom:10px">Minimum ${SETTINGS.minPerShift||2} · Target ${SETTINGS.targetPerShift||4} staff per shift. <span class="delta good">green</span> meets target, <span class="delta bad" style="background:var(--warn-soft);color:var(--warn)">yellow</span> acceptable, <span class="delta bad">red</span> below minimum.</div>
+    <div class="lede no-print" style="margin-bottom:10px">Minimum ${SETTINGS.minPerShift||2} · Target ${SETTINGS.targetPerShift||4} staff per shift. <span class="delta good">green</span> meets target, <span class="delta bad" style="background:var(--warn-soft);color:var(--warn)">yellow</span> acceptable, <span class="delta bad">red</span> below minimum.</div>
     <div class="tbl-wrap"><table class="sched-tbl">
       <thead><tr><th class="name-cell">Shift</th>${p.days.map(d=>`<th>${fmtDate(d)}</th>`).join('')}</tr></thead>
       <tbody>
@@ -673,12 +710,15 @@ function viewSchedule(){
       ${rows.map(s=>{
         const t = totalsFor(p,s);
         return `<tr>
-          <td class="name-cell">${esc(s.name)}</td>
+          <td class="name-cell">${esc(s.name)}${(editable&&prior)?` <button class="btn-g no-print" style="padding:1px 6px;font-size:10px;margin-left:4px" onclick="copyPersonFromPrior(${s.id})" title="Copy this person's pattern from ${esc(prior.label)}">↺ copy</button>`:''}</td>
           ${p.days.map(d=>{
             const val = shiftFor(p,s.id,d);
             const cls = SHIFT_CLASS[val]||'shift-blank';
-            if(!editable){ return `<td class="${cls}">${esc(val)}</td>`; }
-            return `<td class="${cls}" style="padding:0">
+            const conflict = approvedPendingApplyFor(s.id,d);
+            const flagTitle = conflict?`${esc(conflict.type)} approved for this date, not yet applied to the schedule`:'';
+            if(!editable){ return `<td class="${cls}">${esc(val)}${conflict?` <span title="${flagTitle}" style="color:var(--bad);font-weight:700;cursor:help">⚠</span>`:''}</td>`; }
+            return `<td class="${cls}" style="padding:0;position:relative">
+              ${conflict?`<span class="no-print" title="${flagTitle}" style="position:absolute;top:1px;right:3px;font-size:11px;color:var(--bad);z-index:1;cursor:help">⚠</span>`:''}
               <select class="shift-sel" onchange="editShift(${s.id},'${d}',this.value)">
                 ${SHIFT_OPTIONS.map(o=>`<option value="${o}" ${o===val?'selected':''}>${o||'—'}</option>`).join('')}
               </select>
@@ -694,6 +734,71 @@ function viewSchedule(){
   </div>`;
 }
 function changePeriod(id){ ACTIVE_PERIOD=id; PENDING_SCHED_EDITS={}; renderView(); }
+
+// ══════════════════════════════════════════════════════════
+// ADD NEXT PAY PERIOD — the roster only ever shipped with 3 hardcoded
+// periods (through 10/23/26). Without this, once those run out the only
+// way to schedule anyone is hand-editing SEED_SCHEDULE in the source file.
+// This lets a manager spin up the next 14-day period from inside the hub,
+// either blank or pre-filled from the most recent period's pattern shifted
+// forward two weeks (most staff repeat the same rotation each cycle, so
+// "copy" usually only needs a few exceptions adjusted afterward).
+// ══════════════════════════════════════════════════════════
+function fmtShort(d){ const dt=new Date(d+'T00:00:00'); return `${dt.getMonth()+1}/${dt.getDate()}`; }
+function nextPeriodRange(){
+  const last = SCHEDULE.periods[SCHEDULE.periods.length-1];
+  const startDt = new Date(last.end+'T00:00:00'); startDt.setDate(startDt.getDate()+1);
+  const days = [];
+  for(let i=0;i<14;i++){ const d=new Date(startDt); d.setDate(d.getDate()+i); days.push(d.toISOString().slice(0,10)); }
+  return {start:days[0], end:days[13], days};
+}
+function openAddPeriodModal(){
+  const last = SCHEDULE.periods[SCHEDULE.periods.length-1];
+  const {start,end} = nextPeriodRange();
+  const body = document.createElement('div');
+  body.className='mbg';
+  body.innerHTML = `
+  <div class="mbox"><div class="mbdy">
+    <h3>Add Next Pay Period</h3>
+    <div class="lede" style="margin-bottom:16px">${fmtShort(start)} – ${fmtShort(end)}/${end.slice(2,4)}. This adds a brand-new pay period after ${esc(last.label)} — pick how it should start out.</div>
+    <div class="fld">
+      <label style="display:flex;gap:8px;align-items:flex-start;margin-bottom:12px;cursor:pointer">
+        <input type="radio" name="ap_mode" value="copy" checked style="margin-top:3px">
+        <span><strong>Copy the most recent period's pattern</strong> (${esc(last.label)}), shifted forward two weeks. Fastest option if the rotation mostly repeats — you'll still want to adjust for anyone's approved changes.</span>
+      </label>
+      <label style="display:flex;gap:8px;align-items:flex-start;cursor:pointer">
+        <input type="radio" name="ap_mode" value="blank" style="margin-top:3px">
+        <span><strong>Start blank</strong> — every cell empty, build it from scratch.</span>
+      </label>
+    </div>
+    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:18px">
+      <button class="btn-g" onclick="closeModal()">Cancel</button>
+      <button class="btn-n" onclick="createNextPeriod()">Create Period</button>
+    </div>
+  </div></div>`;
+  document.body.appendChild(body);
+}
+async function createNextPeriod(){
+  const mode = document.querySelector('input[name="ap_mode"]:checked').value;
+  const last = SCHEDULE.periods[SCHEDULE.periods.length-1];
+  const {start,end,days} = nextPeriodRange();
+  const label = `${fmtShort(start)} – ${fmtShort(end)}/${end.slice(2,4)}`;
+  const entries = {};
+  STAFF.forEach(s=>{
+    entries[s.id] = {};
+    days.forEach((d,i)=>{
+      entries[s.id][d] = mode==='copy' ? ((last.entries[s.id]||{})[last.days[i]] || '') : '';
+    });
+  });
+  const newPeriod = {id:'pp-'+start, label, start, end, days, entries};
+  SCHEDULE.periods.push(newPeriod);
+  ACTIVE_PERIOD = newPeriod.id;
+  PENDING_SCHED_EDITS = {};
+  saveSchedule();
+  closeModal();
+  toast('New pay period created: '+label);
+  renderView();
+}
 function editShift(staffId,date,val){
   PENDING_SCHED_EDITS[staffId] = PENDING_SCHED_EDITS[staffId]||{};
   PENDING_SCHED_EDITS[staffId][date] = val;
@@ -712,6 +817,87 @@ async function saveScheduleEdits(){
   saveSchedule();
   toast('Schedule saved.');
   renderView();
+}
+
+// ══════════════════════════════════════════════════════════
+// STAFFING IMPACT — simulate what a request would do to shift
+// coverage BEFORE anyone approves it. Never mutates real state.
+// ══════════════════════════════════════════════════════════
+// What code would land on the schedule grid if this request is approved.
+// Returns null for request types we can't simulate (e.g. "Other").
+function requestResultingCode(r){
+  if(r.type==='Time off (PTO)') return 'PTO';
+  if(r.type==='Sick time') return 'SICK';
+  if((r.type==='Shift change'||r.type==='Schedule swap') && r.newShift) return r.newShift;
+  return null;
+}
+// Per affected date, shows the shift the requester is leaving (if any) and
+// the shift they'd be joining (if any), each with a before/after headcount
+// and a red/yellow/green read using the same thresholds as the Schedule tab.
+function coverageImpact(r){
+  const code = requestResultingCode(r);
+  const s = byId(r.staffId);
+  if(!code || !s || !r.dateList || !r.dateList.length) return null;
+  return r.dateList.map(d=>{
+    const p = SCHEDULE.periods.find(pp=>pp.days.includes(d));
+    if(!p) return {date:d, note:'That date isn’t in any published pay period.'};
+    const before = shiftFor(p,s.id,d);
+    const rows = [];
+    if(before && HOURS_PER_SHIFT[before]){
+      const nowCount = STAFF.filter(x=>shiftFor(p,x.id,d)===before).length;
+      const afterCount = nowCount-1;
+      rows.push({date:d, label:'Leaving', shift:before, before:nowCount, after:afterCount, cls:covClass(afterCount)});
+    }
+    if(code!=='PTO' && code!=='SICK' && code!==before && HOURS_PER_SHIFT[code]){
+      const nowCount2 = STAFF.filter(x=>shiftFor(p,x.id,d)===code).length;
+      const afterCount2 = nowCount2+1;
+      rows.push({date:d, label:'Joining', shift:code, before:nowCount2, after:afterCount2, cls:covClass(afterCount2)});
+    }
+    return {date:d, rows};
+  });
+}
+function impactTableHtml(impact){
+  const anyRed = impact.some(d=>d.rows && d.rows.some(row=>row.cls==='cov-red'));
+  const rowsHtml = impact.map(d=>{
+    if(d.note) return `<tr><td class="mono">${fmtDate(d.date)}</td><td colspan="4">${esc(d.note)}</td></tr>`;
+    if(!d.rows.length) return `<tr><td class="mono">${fmtDate(d.date)}</td><td colspan="4">No scheduled shift that day — no coverage change.</td></tr>`;
+    return d.rows.map(row=>`
+      <tr>
+        <td class="mono">${fmtDate(row.date)}</td>
+        <td>${row.label}</td>
+        <td class="mono">${esc(row.shift)}</td>
+        <td class="mono">${row.before} → ${row.after}</td>
+        <td><span class="${row.cls==='cov-red'?'ared':row.cls==='cov-yellow'?'awarn':'agood'}" style="display:inline-block;padding:2px 8px;font-size:11px">${row.cls==='cov-red'?'Below minimum':row.cls==='cov-yellow'?'Acceptable':'At target'}</span></td>
+      </tr>`).join('');
+  }).join('');
+  return `
+  ${anyRed?`<div class="ared" style="margin-bottom:10px">Approving this would drop at least one shift below the minimum staffing level on at least one date.</div>`:''}
+  <div class="tbl-wrap"><table class="tbl">
+    <thead><tr><th>Date</th><th></th><th>Shift</th><th>Staff Before → After</th><th>Result</th></tr></thead>
+    <tbody>${rowsHtml}</tbody>
+  </table></div>`;
+}
+function openImpactModal(id){
+  const r = REQUESTS.find(x=>x.id===id);
+  if(!r) return;
+  const s = byId(r.staffId);
+  const impact = coverageImpact(r);
+  const body = document.createElement('div');
+  body.className='mbg';
+  body.innerHTML = `
+  <div class="mbox"><div class="mbdy">
+    <h3>Review Request — ${esc(s?s.name:'Unknown')}</h3>
+    <div class="lede" style="margin-bottom:14px">${esc(r.type)} · ${esc(r.dates)}${r.newShift?` → ${esc(r.newShift)}`:''}${r.reason?` — “${esc(r.reason)}”`:''}</div>
+    ${impact===null
+      ? `<div class="awarn">Staffing impact can’t be auto-checked for this request type — review the Schedule tab manually before deciding.</div>`
+      : impactTableHtml(impact)}
+    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:20px">
+      <button class="btn-g" onclick="closeModal()">Close without deciding</button>
+      <button class="btn-r" onclick="decideRequest('${r.id}',false);closeModal()">Deny</button>
+      <button class="btn-ok" onclick="decideRequest('${r.id}',true);closeModal()">Approve</button>
+    </div>
+  </div></div>`;
+  document.body.appendChild(body);
 }
 
 // ══════════════════════════════════════════════════════════
@@ -762,7 +948,7 @@ function requestTable(list, actionable){
         <td class="mono">${esc(r.dates)}</td>
         <td>${esc(r.reason)}</td>
         <td>${statusBadge(r.status)}</td>
-        ${actionable?`<td style="display:flex;gap:6px"><button class="btn-ok" onclick="decideRequest('${r.id}',true)">Approve</button><button class="btn-r" onclick="decideRequest('${r.id}',false)">Deny</button></td>`:''}
+        ${actionable?`<td><button class="btn-n" onclick="openImpactModal('${r.id}')">Review &amp; decide</button></td>`:''}
         ${isManager()&&!actionable?`<td>${r.status==='approved'&&r.newShift&&!r.appliedToRoster?`<button class="btn-g" onclick="applyToRoster('${r.id}')">Apply to roster</button>`:(r.appliedToRoster?'<span class="mono" style="font-size:11px;color:var(--good)">Applied ✓</span>':'')}</td>`:''}
       </tr>`).join('')}
     </tbody>
@@ -793,7 +979,10 @@ function openRequestModal(){
         ${['8A-4P','4P-12A','12A-8A','7A-3P'].map(o=>`<option>${o}</option>`).join('')}
       </select>
     </div>
-    <div class="fld"><label class="lbl">Date(s)</label><input class="inp" id="r_dates" placeholder="e.g. 9/22/26 or 9/22–9/24/26"></div>
+    <div class="fld">
+      <label class="lbl">Date(s) — pick every day this request covers</label>
+      <div style="max-height:220px;overflow-y:auto;border:1px solid var(--rule);border-radius:3px;padding:10px;background:#faf6ee">${renderDatePicker(s)}</div>
+    </div>
     <div class="fld"><label class="lbl">Reason / Details</label><textarea class="inp" id="r_reason"></textarea></div>
     <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:18px">
       <button class="btn-g" onclick="closeModal()">Cancel</button>
@@ -802,16 +991,36 @@ function openRequestModal(){
   </div></div>`;
   document.body.appendChild(body);
 }
+// One checkbox per real calendar day across every published pay period, each
+// labeled with that person's currently scheduled shift (if any) so they're
+// picking real dates the same way the Schedule tab shows them — not typing
+// a date string that a coverage check would have to guess how to parse.
+function renderDatePicker(s){
+  return SCHEDULE.periods.map(p=>`
+    <div style="margin-bottom:10px">
+      <div class="lbl" style="margin-bottom:6px">${esc(p.label)}</div>
+      <div style="display:flex;flex-wrap:wrap;gap:6px">
+        ${p.days.map(d=>{
+          const shift = shiftFor(p,s.id,d);
+          return `<label style="display:flex;align-items:center;gap:4px;border:1px solid var(--rule-strong);border-radius:3px;padding:4px 8px;font-size:11.5px;cursor:pointer;background:#fff">
+            <input type="checkbox" class="r_date_cb" value="${d}" style="margin:0">
+            ${fmtDate(d)}${shift?` <span class="mono" style="color:var(--muted)">${esc(shift)}</span>`:''}
+          </label>`;
+        }).join('')}
+      </div>
+    </div>`).join('');
+}
 async function submitRequest(){
   const type = document.getElementById('r_type').value;
-  const dates = document.getElementById('r_dates').value.trim();
   const reason = document.getElementById('r_reason').value.trim();
   const newShift = document.getElementById('r_newshift').value;
-  if(!dates){ toast('Please enter a date.',true); return; }
+  const dateList = Array.from(document.querySelectorAll('.r_date_cb:checked')).map(cb=>cb.value).sort();
+  if(!dateList.length){ toast('Select at least one date.',true); return; }
   const s = CURRENT;
   const hasLead = s.supervisorId && byId(s.supervisorId) && byId(s.supervisorId).role==='team_lead';
   const rec = {
-    id: 'req_'+Date.now(), staffId: s.id, type, dates, reason, newShift: newShift||null,
+    id: 'req_'+Date.now(), staffId: s.id, type, reason, newShift: newShift||null,
+    dateList, dates: dateList.map(fmtDate).join(', '),
     currentShift: s.shift, currentStatus: s.status, dateOfHire: s.dateOfHire,
     status: hasLead ? 'pending_lead' : 'pending_manager',
     leadDecision: null, managerDecision: null,
@@ -841,14 +1050,26 @@ async function applyToRoster(id){
   const r = REQUESTS.find(x=>x.id===id);
   if(!r || r.appliedToRoster) return;
   const s = byId(r.staffId);
-  if(s && r.newShift){
+  const code = requestResultingCode(r);
+  if(s && code && r.dateList && r.dateList.length){
+    r.dateList.forEach(d=>{
+      const p = SCHEDULE.periods.find(pp=>pp.days.includes(d));
+      if(!p) return;
+      p.entries[s.id] = p.entries[s.id]||{};
+      p.entries[s.id][d] = code;
+    });
+    saveSchedule();
+  }
+  // A shift change/swap also updates their standing default shift going
+  // forward, not just the specific dates they requested.
+  if(s && r.newShift && (r.type==='Shift change'||r.type==='Schedule swap')){
     s.shift = r.newShift;
     s.weeklyTargetHours = Math.round((s.fte||0)*(SETTINGS.hoursPerFte||80));
+    saveStaff();
   }
   r.appliedToRoster = true;
   saveRequests();
-  if(s && r.newShift) saveStaff();
-  toast('Applied to roster.');
+  toast('Applied to the schedule.');
   renderView();
 }
 
