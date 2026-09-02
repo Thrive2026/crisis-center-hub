@@ -285,11 +285,16 @@ function isSupervisorOf(supId,staffId){
   }
   return false;
 }
+// Deactivated staff are excluded everywhere by default — the Schedule
+// grid, the main Roster list, the login list (already handled separately
+// in renderLogin). The Roster page has its own toggle to reveal them.
 function visibleStaffFor(){
-  if(isManager()) return STAFF.slice();
-  if(isTeamLead()) return STAFF.filter(s=>s.id===CURRENT.id||s.supervisorId===CURRENT.id);
-  return STAFF.filter(s=>s.id===CURRENT.id);
+  const base = isManager() ? STAFF.slice()
+    : isTeamLead() ? STAFF.filter(s=>s.id===CURRENT.id||s.supervisorId===CURRENT.id)
+    : STAFF.filter(s=>s.id===CURRENT.id);
+  return base.filter(s=>s.status!=='Inactive');
 }
+let SHOW_INACTIVE = false; // Roster-only toggle (manager view)
 
 // ══════════════════════════════════════════════════════════
 // LOGIN
@@ -530,10 +535,14 @@ function statusTilesCard(title, list){
 // ══════════════════════════════════════════════════════════
 function viewRoster(){
   const rows = visibleStaffFor().sort((a,b)=>a.name.localeCompare(b.name));
+  const inactive = isManager() ? STAFF.filter(s=>s.status==='Inactive').sort((a,b)=>a.name.localeCompare(b.name)) : [];
   return `
   <div class="page-hd">
     <div><div class="eyebrow">People</div><h1>Staff Roster</h1><div class="lede">${rows.length} people${canEditRoster()?' · click a row to edit':''}</div></div>
-    ${canEditRoster()?`<button class="btn-t" onclick="openStaffModal()">+ Add Staff</button>`:''}
+    <div style="display:flex;gap:8px">
+      ${(isManager()&&inactive.length)?`<button class="btn-g" onclick="toggleShowInactive()">${SHOW_INACTIVE?'Hide':'Show'} Deactivated (${inactive.length})</button>`:''}
+      ${canEditRoster()?`<button class="btn-t" onclick="openStaffModal()">+ Add Staff</button>`:''}
+    </div>
   </div>
   <div class="card" style="padding:0">
     <div class="tbl-wrap"><table class="tbl">
@@ -549,11 +558,51 @@ function viewRoster(){
           <td><span class="bdg" style="background:var(--${STATUS_COLOR[s.status]||'muted'}-soft,#eee);color:var(--${STATUS_COLOR[s.status]||'ink-soft'})">${esc(s.status)}</span></td>
           <td>${supervisorCellHtml(s)}</td>
           <td class="mono">${esc(s.dateOfHire||'—')}</td>
-          ${canEditRoster()?`<td onclick="event.stopPropagation()">${s.status==='Inactive'?`<button class="btn-ok" onclick="reactivateStaff(${s.id})">Reactivate</button>`:`<button class="btn-r" onclick="deactivateStaff(${s.id})">Deactivate</button>`}</td>`:''}
+          ${canEditRoster()?`<td onclick="event.stopPropagation()"><button class="btn-r" onclick="deactivateStaff(${s.id})">Deactivate</button></td>`:''}
         </tr>`).join('')}
       </tbody>
     </table></div>
-  </div>`;
+  </div>
+  ${(isManager()&&SHOW_INACTIVE&&inactive.length)?`
+  <div class="card" style="padding:0;margin-top:20px;border-color:var(--bad)">
+    <div style="padding:16px 20px 4px">
+      <h3 style="color:var(--bad)">Deactivated Staff (${inactive.length})</h3>
+      <div class="lede" style="margin:4px 0 4px">These no longer appear on the Schedule, in Shift Requests defaults, or the login list. Reactivate to bring someone back, or delete permanently to remove their record for good — shift request and supervision-log history that mentions them stays intact for the record, it'll just show their name as unavailable.</div>
+    </div>
+    <div class="tbl-wrap"><table class="tbl">
+      <thead><tr><th>Name</th><th>Role</th><th>Hire Date</th><th></th></tr></thead>
+      <tbody>
+      ${inactive.map(s=>`
+        <tr>
+          <td><strong>${esc(s.name)}</strong><div style="font-size:11px;color:var(--muted)">${esc(s.email)}</div></td>
+          <td>${roleBadge(s)}</td>
+          <td class="mono">${esc(s.dateOfHire||'—')}</td>
+          <td style="display:flex;gap:6px">
+            <button class="btn-ok" onclick="reactivateStaff(${s.id})">Reactivate</button>
+            <button class="btn-r" onclick="deleteStaffPermanently(${s.id})">Delete permanently</button>
+          </td>
+        </tr>`).join('')}
+      </tbody>
+    </table></div>
+  </div>`:''}`;
+}
+function toggleShowInactive(){ SHOW_INACTIVE=!SHOW_INACTIVE; renderView(); }
+async function deleteStaffPermanently(id){
+  const s = byId(id);
+  if(!s) return;
+  const reports = STAFF.filter(x=>x.supervisorId===id).length;
+  const reqs = REQUESTS.filter(r=>r.staffId===id).length;
+  const supLogs = SUPERVISION.filter(l=>l.staffId===id||l.loggedBy===id).length;
+  const notes = [
+    reports?`${reports} ${reports===1?'person still lists':'people still list'} them as shift-lead supervisor`:'',
+    reqs?`${reqs} shift request${reqs===1?'':'s'} reference them`:'',
+    supLogs?`${supLogs} supervision log ${supLogs===1?'entry references':'entries reference'} them`:'',
+  ].filter(Boolean).join('; ');
+  if(!confirm(`Permanently delete ${s.name}? This removes their staff record and login for good — it can't be undone.${notes?' Note: '+notes+'; that history is kept for the record and will just show their name as unavailable.':''}`)) return;
+  STAFF = STAFF.filter(x=>x.id!==id);
+  saveStaff();
+  toast(s.name+' deleted permanently.');
+  renderView();
 }
 // David is the supervisor of record for everyone, shown on the Roster and
 // the org chart, even though Harold/Rondye still function as day-to-day
@@ -653,7 +702,7 @@ async function deactivateStaff(id){
   if(!s) return;
   const reports = STAFF.filter(x=>x.supervisorId===id).length;
   const warn = reports ? ` ${reports} ${reports===1?'person reports':'people report'} to them directly — they'll keep showing that supervisor, but you can reassign them anytime from this page.` : '';
-  if(!confirm(`Deactivate ${s.name}? They will no longer be able to sign in, and will drop off the Active count.${warn}`)) return;
+  if(!confirm(`Deactivate ${s.name}? They will no longer be able to sign in, and will disappear from the Roster and Schedule — use "Show Deactivated" to find them again.${warn}`)) return;
   s.status = 'Inactive';
   saveStaff();
   toast(`${s.name} deactivated.`);
