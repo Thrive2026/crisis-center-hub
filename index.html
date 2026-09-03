@@ -50,7 +50,15 @@ h3{font-size:16px;font-weight:600}
 .serif{font-family:'Fraunces',Georgia,serif;font-weight:400;letter-spacing:-0.02em}
 .mono{font-family:'IBM Plex Mono',monospace}
 .shell{display:grid;grid-template-columns:220px 1fr;min-height:100vh}
-@media(max-width:880px){.shell{grid-template-columns:1fr}.side{display:none !important}}
+.menu-btn{display:none;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.18);color:#fff;width:32px;height:32px;border-radius:4px;cursor:pointer;align-items:center;justify-content:center;font-size:17px;flex-shrink:0}
+.nav-backdrop{display:none}
+@media(max-width:880px){
+  .shell{grid-template-columns:1fr}
+  .side{display:none !important}
+  .side.open{display:flex !important;position:fixed;top:0;left:0;height:100vh;width:240px;max-width:82vw;z-index:300}
+  .nav-backdrop.open{display:block;position:fixed;inset:0;background:rgba(10,16,50,.5);z-index:290}
+  .menu-btn{display:inline-flex !important}
+}
 nav.side{background:var(--thrive-blue-dark);color:#cdd4f0;border-right:1px solid #0e1638;display:flex;flex-direction:column;position:sticky;top:0;height:100vh;overflow-y:auto}
 nav.side .brand{padding:18px 20px;border-bottom:1px solid #0e1638;display:flex;align-items:center;gap:12px}
 nav.side .brand .text{display:flex;flex-direction:column;line-height:1.15}
@@ -361,6 +369,7 @@ function renderShell(){
   const app = document.getElementById('app');
   app.innerHTML = `
   <div class="shell">
+    <div class="nav-backdrop" id="navBackdrop" onclick="closeMobileNav()"></div>
     <nav class="side" id="sidebar"></nav>
     <div style="display:flex;flex-direction:column;min-width:0">
       <header class="topbar" id="hdr"></header>
@@ -370,6 +379,18 @@ function renderShell(){
   renderSidebar();
   renderTopbar();
   renderView();
+}
+// On phones the sidebar is hidden by default (see the 880px media query) and
+// opens as a slide-in drawer instead — without this, there was no way at all
+// to get from the Dashboard to Roster/Schedule/Requests/etc. on a phone.
+function toggleMobileNav(){
+  const opening = !document.getElementById('sidebar').classList.contains('open');
+  document.getElementById('sidebar').classList.toggle('open', opening);
+  document.getElementById('navBackdrop').classList.toggle('open', opening);
+}
+function closeMobileNav(){
+  document.getElementById('sidebar').classList.remove('open');
+  document.getElementById('navBackdrop').classList.remove('open');
 }
 function renderSidebar(){
   const items = NAV_ITEMS.filter(i=>!i.mgrOnly || isManager());
@@ -389,6 +410,7 @@ function renderTopbar(){
   const item = NAV_ITEMS.find(i=>i.k===VIEW);
   document.getElementById('hdr').innerHTML = `
     <div class="ctx">
+      <button class="menu-btn" onclick="toggleMobileNav()" aria-label="Menu">☰</button>
       <span class="where">${item?item.label:''}</span>
       <span class="pill ${LIVE?'live':'seed'}">${LIVE?'● LIVE · SUPABASE':'○ SEED DATA'}</span>
     </div>
