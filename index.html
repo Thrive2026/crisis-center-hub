@@ -775,22 +775,30 @@ function viewSchedule(){
   if(!p) return `<div class="page-hd"><h1>Schedule</h1></div><div class="awarn">No pay periods found.</div>`;
   const rows = visibleStaffFor().sort((a,b)=>a.name.localeCompare(b.name));
   const cov = coverageFor(p);
-  const editable = canEditSchedule();
+  // Locking is period-specific and overrides edit rights for EVERYONE,
+  // David included — the point is to freeze a schedule once it's finalized
+  // (e.g. sent to payroll) so nobody, not even accidentally, changes it
+  // until he deliberately unlocks it again. Only a manager can toggle the
+  // lock itself.
+  const locked = !!p.locked;
+  const editable = canEditSchedule() && !locked;
   const dirty = Object.keys(PENDING_SCHED_EDITS).length>0;
   const periodIdx = SCHEDULE.periods.findIndex(pp=>pp.id===p.id);
   const prior = periodIdx>0 ? SCHEDULE.periods[periodIdx-1] : null;
   return `
   <div class="page-hd">
-    <div><div class="eyebrow">Biweekly</div><h1>Schedule</h1><div class="lede">${esc(p.label)}${editable?' · edit shifts below, then Save changes':''}</div></div>
+    <div><div class="eyebrow">Biweekly</div><h1>Schedule ${locked?'<span class="bdg" style="background:var(--bad-soft);color:var(--bad);vertical-align:middle;font-size:11px">🔒 Locked</span>':''}</h1><div class="lede">${esc(p.label)}${editable?' · edit shifts below, then Save changes':(locked?' · Locked — unlock to make changes':'')}</div></div>
     <div class="no-print" style="display:flex;gap:8px;align-items:center">
       <select class="inp" style="width:auto" onchange="changePeriod(this.value)">
-        ${SCHEDULE.periods.map(pp=>`<option value="${pp.id}" ${pp.id===p.id?'selected':''}>${esc(pp.label)}</option>`).join('')}
+        ${SCHEDULE.periods.map(pp=>`<option value="${pp.id}" ${pp.id===p.id?'selected':''}>${esc(pp.label)}${pp.locked?' 🔒':''}</option>`).join('')}
       </select>
       ${isManager()?`<button class="btn-g" onclick="openAddPeriodModal()">+ Add Next Period</button>`:''}
+      ${isManager()?`<button class="${locked?'btn-ok':'btn-g'}" onclick="toggleLockPeriod()">${locked?'🔓 Unlock Period':'🔒 Lock Period'}</button>`:''}
       <button class="btn-g" onclick="window.print()">Print schedule</button>
       ${editable?`<button class="btn-n" ${dirty?'':'disabled'} onclick="saveScheduleEdits()">Save changes</button>`:''}
     </div>
   </div>
+  ${(locked&&canEditSchedule())?`<div class="awarn" style="margin-bottom:16px">This pay period is locked${isManager()?' — unlock it above to edit.':' — ask David to unlock it if something needs to change.'}</div>`:''}
   <div class="print-only" style="font-size:11px;color:#555;margin:-10px 0 16px">${esc(SETTINGS.orgName||'Thrive Crisis Center')} — ${esc(p.label)} — printed ${new Date().toLocaleDateString('en-US')}</div>
   <div class="card" style="margin-bottom:20px">
     <h3 style="margin-bottom:10px">Coverage Summary</h3>
@@ -839,6 +847,18 @@ function viewSchedule(){
   </div>`;
 }
 function changePeriod(id){ ACTIVE_PERIOD=id; PENDING_SCHED_EDITS={}; renderView(); }
+function toggleLockPeriod(){
+  const p = period(ACTIVE_PERIOD);
+  if(!p) return;
+  if(!p.locked && Object.keys(PENDING_SCHED_EDITS).length){
+    toast('Save or discard your pending changes before locking.', true);
+    return;
+  }
+  p.locked = !p.locked;
+  saveSchedule();
+  toast(p.locked ? p.label+' is now locked.' : p.label+' is unlocked.');
+  renderView();
+}
 
 // ══════════════════════════════════════════════════════════
 // ADD NEXT PAY PERIOD — the roster only ever shipped with 3 hardcoded
@@ -1183,6 +1203,15 @@ async function applyToRoster(id){
   const s = byId(r.staffId);
   const code = requestResultingCode(r);
   if(s && code && r.dateList && r.dateList.length){
+    const lockedPeriods = new Set();
+    r.dateList.forEach(d=>{
+      const p = SCHEDULE.periods.find(pp=>pp.days.includes(d));
+      if(p && p.locked) lockedPeriods.add(p.label);
+    });
+    if(lockedPeriods.size){
+      toast('Can’t apply — unlock '+Array.from(lockedPeriods).join(', ')+' first, then try again.', true);
+      return;
+    }
     r.dateList.forEach(d=>{
       const p = SCHEDULE.periods.find(pp=>pp.days.includes(d));
       if(!p) return;
